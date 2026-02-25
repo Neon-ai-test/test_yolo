@@ -28,23 +28,19 @@ backend/
 ## 功能特性
 
 - YOLOv8n 实时目标检测
-- WebSocket 实时视频流处理
+- WebSocket 实时视频流处理（异步）
 - REST API 图片上传检测
 - CORS 跨域支持
 - 模型启动时预加载
+- 自动GPU/CPU检测
+- 性能基准测试
+- 中英文类别映射
 
 ## 快速开始
 
 ### 安装依赖
 
 ```bash
-pip install -r requirements.txt
-```
-
-或使用 CPU 版本的 PyTorch（节省磁盘空间）:
-
-```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 ```
 
@@ -55,21 +51,6 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 服务启动后自动下载 YOLOv8n 模型（约6MB）。
-
-### Docker 部署
-
-```dockerfile
-FROM python:3.10-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
 
 ## API 接口
 
@@ -87,7 +68,7 @@ GET /
 }
 ```
 
-### 2. 获取识别类别
+### 2. 获取识别类别（含中文）
 
 ```
 GET /api/classes
@@ -97,14 +78,44 @@ GET /api/classes
 ```json
 {
   "classes": [
-    {"id": 0, "name": "person"},
-    {"id": 1, "name": "bicycle"},
+    {"id": 0, "name": "person", "name_cn": "人"},
+    {"id": 1, "name": "bicycle", "name_cn": "自行车"},
     ...
   ]
 }
 ```
 
-### 3. 图片检测
+### 3. 性能测试
+
+```
+GET /api/benchmark
+```
+
+响应:
+```json
+{
+  "device": "cpu",
+  "avg_process_time_ms": 262.52,
+  "recommended_fps": 3,
+  "iterations": 5
+}
+```
+
+### 4. 设备信息
+
+```
+GET /api/info
+```
+
+响应:
+```json
+{
+  "device": "cuda",
+  "model": "yolov8n"
+}
+```
+
+### 5. 图片检测
 
 ```
 POST /api/detect
@@ -121,14 +132,14 @@ Content-Type: multipart/form-data
       "bbox": [100.5, 200.3, 300.7, 400.1],
       "confidence": 0.95,
       "class_id": 0,
-      "class_name": "person"
+      "class_name": "person",
+      "class_name_cn": "人"
     }
-  ],
-  "image": "base64编码的绘制了框的图片"
+  ]
 }
 ```
 
-### 4. WebSocket 实时检测
+### 6. WebSocket 实时检测
 
 ```
 WS /ws/detect
@@ -146,10 +157,41 @@ WS /ws/detect
 ```json
 {
   "type": "result",
-  "detections": [...],
-  "image": "base64编码的绘制了框的图片"
+  "detections": [...]
 }
 ```
+
+## 性能优化
+
+### 后端优化策略
+
+1. **自动GPU检测**：自动使用CUDA加速
+2. **异步处理**：WebSocket不阻塞
+3. **队列削峰**：只处理最新帧
+4. **输入尺寸优化**：默认320x320
+
+### 帧率预估
+
+| 硬件 | 预期FPS |
+|------|---------|
+| CPU (普通) | 2-5 FPS |
+| CPU (高性能服务器) | 5-10 FPS |
+| GPU (GTX 1060+) | 30-50 FPS |
+| GPU (RTX 3080+) | 60-100 FPS |
+
+## 支持的识别类别 (COCO 80类中文)
+
+| ID | 英文 | 中文 |
+|----|------|------|
+| 0 | person | 人 |
+| 1 | bicycle | 自行车 |
+| 2 | car | 汽车 |
+| 3 | motorcycle | 摩托车 |
+| 4 | airplane | 飞机 |
+| ... | ... | ... |
+| 79 | toothbrush | 牙刷 |
+
+完整列表见 `detector.py` 中的 `COCO_CLASSES_CN` 字典。
 
 ## 检测器配置
 
@@ -159,6 +201,7 @@ WS /ws/detect
 |------|--------|------|
 | model | yolov8n.pt | 模型文件名 |
 | conf | 0.25 | 置信度阈值 |
+| imgsz | 320 | 输入图片尺寸 |
 
 ### 支持的模型
 
@@ -170,28 +213,145 @@ WS /ws/detect
 | yolov8l.pt | 53.7M | 慢 | 高 |
 | yolov8x.pt | 103.7M | 最慢 | 最高 |
 
-切换模型只需修改 `app/main.py` 中的模型路径。
+切换模型只需修改 `app/detector.py` 中的模型路径。
 
-## 支持的识别类别 (COCO 80类)
+## 部署教程
 
-person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light, fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, couch, potted plant, bed, dining table, toilet, tv, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear, hair drier, toothbrush
+### 本地开发部署
 
-## 性能优化
+```bash
+# 1. 克隆项目
+git clone <repo-url>
+cd yolo-vision-system
 
-### 1. 帧率控制
+# 2. 启动后端
+cd backend
+pip install -r requirements.txt
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-前端可通过调整 `requestAnimationFrame` 频率控制发送帧率。
-
-### 2. 图片压缩
-
-前端发送前可压缩图片质量:
-```javascript
-canvas.toDataURL('image/jpeg', 0.8)
+# 3. 启动前端（新终端）
+cd frontend
+npm install
+npm run dev
 ```
 
-### 3. 批处理
+访问 http://localhost:3000
 
-可修改 `detector.py` 支持批量检测多帧。
+### 服务器部署（阿里云等）
+
+#### 1. 环境要求
+
+- Ubuntu 18.04+ / CentOS 8+
+- Python 3.8+
+- Node.js 16+
+
+#### 2. 后端部署
+
+```bash
+# 安装依赖
+cd /var/www/yolo-vision-system/backend
+pip install -r requirements.txt
+
+# 使用Systemd管理（推荐）
+sudo tee /etc/systemd/system/yolo-api.service << EOF
+[Unit]
+Description=YOLO Vision API
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/yolo-vision-system/backend
+ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable yolo-api
+sudo systemctl start yolo-api
+```
+
+#### 3. 前端部署
+
+```bash
+# 构建
+cd /var/www/yolo-vision-system/frontend
+npm install
+npm run build
+
+# 配置Nginx
+sudo tee /etc/nginx/sites-available/yolo << EOF
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    root /var/www/yolo-vision-system/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://127.0.0.1:8000;
+    }
+
+    location /ws {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+EOF
+
+sudo ln -s /etc/nginx/sites-available/yolo /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+#### 4. GPU服务器部署（推荐）
+
+```bash
+# 安装CUDA版PyTorch
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# 后端会自动检测并使用GPU
+```
+
+#### 5. Docker部署
+
+```dockerfile
+# Dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+构建运行：
+```bash
+docker build -t yolo-vision .
+docker run -d --gpus all -p 8000:8000 yolo-vision
+```
+
+### 端口开放
+
+服务器安全组需开放：
+- 80 (HTTP)
+- 443 (HTTPS)
+- 8000 (后端API)
 
 ## 错误处理
 
@@ -203,10 +363,11 @@ canvas.toDataURL('image/jpeg', 0.8)
 
 ## 日志
 
-日志默认级别为 INFO，可通过修改 `app/main.py` 调整:
+日志默认级别为 INFO：
 
-```python
-logging.basicConfig(level=logging.DEBUG)
+```bash
+# 查看日志
+sudo journalctl -u yolo-api -f
 ```
 
 ## 相关文档
