@@ -175,6 +175,7 @@ const startCamera = async () => {
     isStreaming.value = true
     
     wsConnected.value = connect('ws://localhost:8000/ws/detect')
+    setConfidence(confidence.value)
     
     captureFrame()
   } catch (err) {
