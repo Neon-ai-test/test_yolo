@@ -48,6 +48,7 @@ class YOLODetector:
     def detect(self, image_data: bytes, conf: float = 0.25) -> dict:
         nparr = np.frombuffer(image_data, np.uint8)
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        h, w = image.shape[:2]
 
         results = self.model(image, conf=conf, verbose=False, device=self.device, imgsz=IMGSZ)
 
@@ -69,7 +70,7 @@ class YOLODetector:
                     "class_name_cn": class_name_cn
                 })
 
-        return {"detections": detections}
+        return {"detections": detections, "width": w, "height": h}
 
     def get_info(self) -> dict:
         return {

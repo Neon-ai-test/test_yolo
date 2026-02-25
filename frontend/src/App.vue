@@ -1,86 +1,71 @@
 <template>
-  <div class="min-h-screen bg-gray-100">
-    <header class="bg-white shadow-sm">
-      <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-gray-800">YOLO 视觉识别系统</h1>
-        <div class="flex items-center gap-4">
-          <span class="text-sm px-2 py-1 rounded" :class="device === 'cuda' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'">
-            {{ device === 'cuda' ? '● GPU' : '○ CPU' }}
+  <div class="fixed inset-0 bg-black overflow-hidden">
+    <!-- 视频区域 -->
+    <video 
+      ref="videoRef" 
+      autoplay 
+      playsinline 
+      muted
+      class="absolute inset-0 w-full h-full object-contain"
+    ></video>
+    <canvas 
+      ref="canvasRef"
+      class="absolute inset-0 w-full h-full object-contain pointer-events-none"
+    ></canvas>
+    
+    <!-- 未开始提示 -->
+    <div v-if="!isStreaming" class="absolute inset-0 flex items-center justify-center bg-black/80">
+      <p class="text-gray-400 text-lg">点击底部按钮开始识别</p>
+    </div>
+    
+    <!-- 顶部状态栏 -->
+    <div class="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/70 to-transparent">
+      <div class="flex items-center justify-between text-white">
+        <span class="text-sm font-medium">YOLO 视觉识别</span>
+        <div class="flex items-center gap-3">
+          <span class="text-sm px-2 py-0.5 rounded" :class="device === 'cuda' ? 'bg-green-500/70' : 'bg-yellow-500/70'">
+            {{ device === 'cuda' ? 'GPU' : 'CPU' }}
           </span>
-          <span class="text-sm text-gray-500">{{ recommendedFps }} FPS</span>
-          <span class="text-sm" :class="wsConnected ? 'text-green-600' : 'text-red-600'">
-            {{ wsConnected ? '● 已连接' : '● 未连接' }}
+          <span class="text-sm">{{ recommendedFps }} FPS</span>
+          <span class="text-sm" :class="wsConnected ? 'text-green-400' : 'text-red-400'">
+            {{ wsConnected ? '●' : '○' }}
           </span>
         </div>
       </div>
-    </header>
-
-    <main class="max-w-7xl mx-auto px-4 py-6">
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div class="lg:col-span-2">
-          <div class="bg-white rounded-lg shadow p-4">
-            <div class="relative bg-black rounded-lg overflow-hidden" style="aspect-ratio: 4/3;">
-              <video 
-                ref="videoRef" 
-                autoplay 
-                playsinline 
-                muted
-                class="absolute inset-0 w-full h-full object-contain"
-              ></video>
-              <canvas 
-                ref="canvasRef"
-                class="absolute inset-0 w-full h-full pointer-events-none"
-              ></canvas>
-              
-              <div v-if="!isStreaming" class="absolute inset-0 flex items-center justify-center bg-gray-900">
-                <p class="text-gray-400">点击下方按钮开始识别</p>
-              </div>
-            </div>
-            
-            <div class="mt-4 flex gap-4">
-              <button 
-                @click="toggleCamera"
-                class="px-6 py-2 rounded-lg font-medium transition-colors"
-                :class="isStreaming ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'"
-              >
-                {{ isStreaming ? '停止识别' : '开始识别' }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="space-y-4">
-          <div class="bg-white rounded-lg shadow p-4">
-            <h2 class="text-lg font-semibold mb-3">识别结果</h2>
-            <div v-if="detections.length > 0" class="space-y-2 max-h-64 overflow-y-auto">
-              <div 
-                v-for="(det, idx) in detections" 
-                :key="idx"
-                class="p-2 bg-gray-50 rounded flex justify-between items-center"
-              >
-                <span class="font-medium">{{ det.class_name_cn || det.class_name }}</span>
-                <span class="text-sm text-gray-500">{{ (det.confidence * 100).toFixed(1) }}%</span>
-              </div>
-            </div>
-            <p v-else class="text-gray-400 text-sm">暂无识别结果</p>
-          </div>
-
-          <div class="bg-white rounded-lg shadow p-4">
-            <h2 class="text-lg font-semibold mb-3">检测统计</h2>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="text-center p-3 bg-gray-50 rounded">
-                <div class="text-2xl font-bold text-blue-600">{{ detections.length }}</div>
-                <div class="text-sm text-gray-500">目标数量</div>
-              </div>
-              <div class="text-center p-3 bg-gray-50 rounded">
-                <div class="text-2xl font-bold text-green-600">{{ uniqueClasses }}</div>
-                <div class="text-sm text-gray-500">类别数量</div>
-              </div>
-            </div>
+    </div>
+    
+    <!-- 底部控制栏 -->
+    <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent">
+      <div class="flex justify-center gap-4">
+        <button 
+          @click="toggleCamera"
+          class="px-6 py-2 rounded-full font-medium transition-colors"
+          :class="isStreaming ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'"
+        >
+          {{ isStreaming ? '停止识别' : '开始识别' }}
+        </button>
+      </div>
+    </div>
+    
+    <!-- 右侧识别结果面板 -->
+    <div 
+      class="absolute top-16 right-3 w-48 max-h-[60vh] overflow-y-auto rounded-lg bg-black/50 backdrop-blur-sm p-3"
+      :class="detections.length > 0 ? 'block' : 'hidden'"
+    >
+      <div class="text-white text-sm">
+        <div class="font-medium mb-2">识别结果 ({{ detections.length }})</div>
+        <div class="space-y-1">
+          <div 
+            v-for="(det, idx) in detections" 
+            :key="idx"
+            class="flex justify-between items-center py-1 px-2 bg-white/10 rounded"
+          >
+            <span>{{ det.class_name_cn || det.class_name }}</span>
+            <span class="text-gray-400">{{ (det.confidence * 100).toFixed(0) }}%</span>
           </div>
         </div>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -107,6 +92,7 @@ let stream = null
 let captureTimer = null
 let isProcessing = false
 let frameInterval = 100
+let imageSize = { width: 640, height: 480 }
 
 const initBenchmark = async () => {
   try {
@@ -120,9 +106,7 @@ const initBenchmark = async () => {
     device.value = info.device || 'cpu'
     recommendedFps.value = benchmark.recommended_fps || 10
     frameInterval = Math.floor(1000 / recommendedFps.value)
-    console.log('Device:', info, 'Benchmark:', benchmark)
   } catch (e) {
-    console.warn('Init failed, using defaults')
     recommendedFps.value = 10
     frameInterval = 100
   }
@@ -186,11 +170,32 @@ const captureFrame = () => {
     const video = videoRef.value
     if (!video || video.readyState !== 4) return
     
+    const videoWidth = video.videoWidth || 640
+    const videoHeight = video.videoHeight || 480
+    
+    const containerWidth = video.clientWidth
+    const containerHeight = video.clientHeight
+    
+    const containerRatio = containerWidth / containerHeight
+    const videoRatio = videoWidth / videoHeight
+    
+    let srcX = 0, srcY = 0, srcW = videoWidth, srcH = videoHeight
+    
+    if (containerRatio > videoRatio) {
+      srcH = containerHeight * videoWidth / containerWidth
+      srcY = (videoHeight - srcH) / 2
+    } else {
+      srcW = containerWidth * videoHeight / containerHeight
+      srcX = (videoWidth - srcW) / 2
+    }
+    
     const canvas = document.createElement('canvas')
-    canvas.width = 128
-    canvas.height = 96
+    canvas.width = Math.floor(srcW)
+    canvas.height = Math.floor(srcH)
+    imageSize = { width: canvas.width, height: canvas.height }
+    
     const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, 0, 0, 128, 96)
+    ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height)
     
     canvas.toBlob((blob) => {
       if (blob && isStreaming.value) {
@@ -208,42 +213,66 @@ const drawDetections = (dets) => {
   if (!canvas) return
   
   const ctx = canvas.getContext('2d')
-  const video = videoRef.value
   
-  canvas.width = video.videoWidth || 640
-  canvas.height = video.videoHeight || 480
+  canvas.width = canvas.clientWidth
+  canvas.height = canvas.clientHeight
   
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   
   if (!dets || dets.length === 0) return
   
-  const scaleX = canvas.width / 128
-  const scaleY = canvas.height / 96
+  const video = videoRef.value
+  if (!video) return
+  
+  const videoWidth = video.videoWidth || 640
+  const videoHeight = video.videoHeight || 480
+  
+  const containerWidth = video.clientWidth
+  const containerHeight = video.clientHeight
+  
+  const containerRatio = containerWidth / containerHeight
+  const videoRatio = videoWidth / videoHeight
+  
+  let videoDisplayWidth, videoDisplayHeight, offsetX, offsetY
+  
+  if (containerRatio > videoRatio) {
+    videoDisplayHeight = containerHeight
+    videoDisplayWidth = videoDisplayHeight * videoRatio
+    offsetX = (containerWidth - videoDisplayWidth) / 2
+    offsetY = 0
+  } else {
+    videoDisplayWidth = containerWidth
+    videoDisplayHeight = videoDisplayWidth / videoRatio
+    offsetX = 0
+    offsetY = (containerHeight - videoDisplayHeight) / 2
+  }
+  
+  const scaleX = videoDisplayWidth / imageSize.width
+  const scaleY = videoDisplayHeight / imageSize.height
   
   for (const det of dets) {
     const [x1, y1, x2, y2] = det.bbox
     const confidence = det.confidence
     const className = det.class_name_cn || det.class_name
     
-    const sx1 = x1 * scaleX
-    const sy1 = y1 * scaleY
-    const sx2 = x2 * scaleX
-    const sy2 = y2 * scaleY
+    const sx1 = x1 * scaleX + offsetX
+    const sy1 = y1 * scaleY + offsetY
+    const sx2 = x2 * scaleX + offsetX
+    const sy2 = y2 * scaleY + offsetY
     
     ctx.strokeStyle = '#00FF00'
     ctx.lineWidth = 2
     ctx.strokeRect(sx1, sy1, sx2 - sx1, sy2 - sy1)
     
-    ctx.fillStyle = '#00FF00'
-    ctx.font = '14px Arial'
+    ctx.font = '12px Arial'
     const label = `${className} ${(confidence * 100).toFixed(0)}%`
     const textWidth = ctx.measureText(label).width
     
     ctx.fillStyle = 'rgba(0, 255, 0, 0.8)'
-    ctx.fillRect(sx1, sy1 - 18, textWidth + 8, 18)
+    ctx.fillRect(sx1, sy1 - 14, textWidth + 4, 14)
     
     ctx.fillStyle = '#000000'
-    ctx.fillText(label, sx1 + 4, sy1 - 4)
+    ctx.fillText(label, sx1 + 2, sy1 - 2)
   }
 }
 
@@ -251,6 +280,9 @@ onMessage((data) => {
   if (data.type === 'result') {
     isProcessing = false
     const dets = data.detections || []
+    if (data.width && data.height) {
+      imageSize = { width: data.width, height: data.height }
+    }
     detections.value = dets
     drawDetections(dets)
   }
