@@ -11,6 +11,8 @@ export default function useWebSocket() {
 
     socket.value = new WebSocket(url)
 
+    socket.value.binaryType = 'arraybuffer'
+
     socket.value.onopen = () => {
       console.log('WebSocket connected')
     }
@@ -38,12 +40,15 @@ export default function useWebSocket() {
     }
   }
 
-  const sendFrame = (imageData) => {
+  const sendFrame = (buffer) => {
     if (socket.value?.readyState === WebSocket.OPEN) {
-      socket.value.send(JSON.stringify({
-        type: 'frame',
-        image: imageData
-      }))
+      // 创建包含类型前缀的二进制数据
+      // 第一个字节: 0x01 = frame
+      const frameType = new Uint8Array([0x01])
+      const combined = new Uint8Array(frameType.length + buffer.byteLength)
+      combined.set(frameType, 0)
+      combined.set(new Uint8Array(buffer), frameType.length)
+      socket.value.send(combined)
     }
   }
 

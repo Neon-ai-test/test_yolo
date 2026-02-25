@@ -3,7 +3,6 @@ import base64
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict
 import logging
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -32,54 +31,51 @@ manager = ConnectionManager()
 async def handle_websocket(websocket: WebSocket, detector):
     await manager.connect(websocket)
     
-    latest_image = None
+    latest_image_bytes = None
     is_processing = False
     
     try:
         while True:
             try:
-                data = await asyncio.wait_for(websocket.receive_json(), timeout=0.001)
+                message = await asyncio.wait_for(websocket.receive_bytes(), timeout=0.001)
             except asyncio.TimeoutError:
                 await asyncio.sleep(0)
                 continue
             
-            if data.get("type") == "frame":
-                latest_image = data.get("image")
+            if message and len(message) > 0:
+                msg_type = message[0]
                 
-                if not is_processing and latest_image:
-                    is_processing = True
-                    image_b64 = latest_image
+                if msg_type == 0x01:
+                    image_bytes = message[1:]
+                    latest_image_bytes = image_bytes
                     
-                    def process():
+                    if not is_processing and latest_image_bytes:
+                        is_processing = True
+                        img_data = latest_image_bytes
+                        
+                        def process():
+                            try:
+                                result = detector.detect(img_data, conf=0.25)
+                                return result
+                            except Exception as e:
+                                logger.error(f"Detection error: {e}")
+                                return {"detections": []}
+                        
+                        asyncio.get_event_loop().run_in_executor(None, process).add_done_callback(
+                            lambda f: asyncio.create_task(send_result(f.result()))
+                        )
+                    
+                    async def send_result(result):
+                        nonlocal is_processing
+                        is_processing = False
                         try:
-                            image_bytes = base64.b64decode(image_b64)
-                            result = detector.detect(image_bytes, conf=0.25)
-                            return result
+                            response = {
+                                "type": "result",
+                                "detections": result["detections"]
+                            }
+                            await manager.send_message(websocket, response)
                         except Exception as e:
-                            logger.error(f"Detection error: {e}")
-                            return {"detections": []}
-                    
-                    def done_callback(future):
-                        asyncio.create_task(send_result(future.result()))
-                    
-                    asyncio.get_event_loop().run_in_executor(None, process).add_done_callback(
-                        lambda f: asyncio.create_task(send_result(f.result()))
-                    )
-                
-                async def send_result(result):
-                    nonlocal is_processing
-                    is_processing = False
-                    try:
-                        response = {
-                            "type": "result",
-                            "detections": result["detections"]
-                        }
-                        await manager.send_message(websocket, response)
-                    except Exception as e:
-                        logger.error(f"Send error: {e}")
-
-            elif data.get("type") == "ping":
-                await manager.send_message(websocket, {"type": "pong"})
+                            logger.error(f"Send error: {e}")
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)

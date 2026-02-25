@@ -187,14 +187,19 @@ const captureFrame = () => {
     if (!video || video.readyState !== 4) return
     
     const canvas = document.createElement('canvas')
-    canvas.width = 320
-    canvas.height = 240
+    canvas.width = 192
+    canvas.height = 144
     const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, 0, 0, 320, 240)
+    ctx.drawImage(video, 0, 0, 192, 144)
     
-    const imageData = canvas.toDataURL('image/jpeg', 0.7).split(',')[1]
-    isProcessing = true
-    sendFrame(imageData)
+    canvas.toBlob((blob) => {
+      if (blob && isStreaming.value) {
+        blob.arrayBuffer().then(buffer => {
+          isProcessing = true
+          sendFrame(buffer)
+        })
+      }
+    }, 'image/jpeg', 0.7)
   }, frameInterval)
 }
 
@@ -212,8 +217,8 @@ const drawDetections = (dets) => {
   
   if (!dets || dets.length === 0) return
   
-  const scaleX = canvas.width / 320
-  const scaleY = canvas.height / 240
+  const scaleX = canvas.width / 192
+  const scaleY = canvas.height / 144
   
   for (const det of dets) {
     const [x1, y1, x2, y2] = det.bbox
