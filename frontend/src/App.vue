@@ -93,6 +93,7 @@ let captureTimer = null
 let isProcessing = false
 let frameInterval = 100
 let imageSize = { width: 640, height: 480 }
+const SCALE_FACTOR = 1 // 图片放大倍数，可调整
 
 const initBenchmark = async () => {
   try {
@@ -190,8 +191,8 @@ const captureFrame = () => {
     }
     
     const canvas = document.createElement('canvas')
-    canvas.width = Math.floor(srcW)
-    canvas.height = Math.floor(srcH)
+    canvas.width = Math.floor(srcW * SCALE_FACTOR)
+    canvas.height = Math.floor(srcH * SCALE_FACTOR)
     imageSize = { width: canvas.width, height: canvas.height }
     
     const ctx = canvas.getContext('2d')
