@@ -3,6 +3,7 @@ import { ref } from 'vue'
 export default function useWebSocket() {
   const socket = ref(null)
   const messageHandlers = ref([])
+  let currentConfidence = 0.25
 
   const connect = (url) => {
     if (socket.value?.readyState === WebSocket.OPEN) {
@@ -40,14 +41,17 @@ export default function useWebSocket() {
     }
   }
 
+  const setConfidence = (conf) => {
+    currentConfidence = conf
+  }
+
   const sendFrame = (buffer) => {
     if (socket.value?.readyState === WebSocket.OPEN) {
-      // 创建包含类型前缀的二进制数据
-      // 第一个字节: 0x01 = frame
-      const frameType = new Uint8Array([0x01])
-      const combined = new Uint8Array(frameType.length + buffer.byteLength)
-      combined.set(frameType, 0)
-      combined.set(new Uint8Array(buffer), frameType.length)
+      const confInt = Math.floor(currentConfidence * 100)
+      const header = new Uint8Array([0x01, confInt])
+      const combined = new Uint8Array(header.length + buffer.byteLength)
+      combined.set(header, 0)
+      combined.set(new Uint8Array(buffer), header.length)
       socket.value.send(combined)
     }
   }
@@ -60,6 +64,7 @@ export default function useWebSocket() {
     connect,
     disconnect,
     sendFrame,
+    setConfidence,
     onMessage
   }
 }

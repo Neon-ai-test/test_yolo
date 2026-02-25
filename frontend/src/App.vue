@@ -23,6 +23,18 @@
       <div class="flex items-center justify-between text-white">
         <span class="text-sm font-medium">YOLO 视觉识别</span>
         <div class="flex items-center gap-3">
+          <div class="flex items-center gap-1">
+            <span class="text-xs">{{ (confidence * 100).toFixed(0) }}%</span>
+            <input 
+              type="range" 
+              min="0.1" 
+              max="0.9" 
+              step="0.05" 
+              v-model="confidence"
+              @input="saveConfidence"
+              class="w-20 h-1 bg-white/30 rounded-lg appearance-none cursor-pointer"
+            >
+          </div>
           <span class="text-sm px-2 py-0.5 rounded" :class="device === 'cuda' ? 'bg-green-500/70' : 'bg-yellow-500/70'">
             {{ device === 'cuda' ? 'GPU' : 'CPU' }}
           </span>
@@ -80,8 +92,15 @@ const detections = shallowRef([])
 const wsConnected = ref(false)
 const recommendedFps = ref(10)
 const device = ref('cpu')
+const CONFIDENCE = parseFloat(localStorage.getItem('yolo_confidence') || '0.25')
+const confidence = ref(CONFIDENCE)
 
-const { connect, disconnect, sendFrame, onMessage } = useWebSocket()
+const saveConfidence = () => {
+  localStorage.setItem('yolo_confidence', confidence.value.toString())
+  setConfidence(confidence.value)
+}
+
+const { connect, disconnect, sendFrame, setConfidence, onMessage } = useWebSocket()
 
 const uniqueClasses = computed(() => {
   const classes = new Set(detections.value.map(d => d.class_name))
@@ -93,7 +112,31 @@ let captureTimer = null
 let isProcessing = false
 let frameInterval = 100
 let imageSize = { width: 640, height: 480 }
-const SCALE_FACTOR = 1 // 图片放大倍数，可调整
+let lastPersonCount = 0
+const SCALE_FACTOR = 1
+const PLAY_SOUND = true
+
+const playDetectionSound = () => {
+  if (!PLAY_SOUND) return
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+    const oscillator = audioCtx.createOscillator()
+    const gainNode = audioCtx.createGain()
+    
+    oscillator.connect(gainNode)
+    gainNode.connect(audioCtx.destination)
+    
+    oscillator.frequency.value = 800
+    oscillator.type = 'sine'
+    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3)
+    
+    oscillator.start(audioCtx.currentTime)
+    oscillator.stop(audioCtx.currentTime + 0.3)
+  } catch (e) {
+    console.log('Audio error:', e)
+  }
+} // 图片放大倍数，可调整
 
 const initBenchmark = async () => {
   try {
@@ -284,6 +327,13 @@ onMessage((data) => {
     if (data.width && data.height) {
       imageSize = { width: data.width, height: data.height }
     }
+    
+    const personCount = dets.filter(d => d.class_name === 'person').length
+    if (personCount > 0 && personCount > lastPersonCount) {
+      playDetectionSound()
+    }
+    lastPersonCount = personCount
+    
     detections.value = dets
     drawDetections(dets)
   }

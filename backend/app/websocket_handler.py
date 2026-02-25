@@ -32,12 +32,13 @@ async def handle_websocket(websocket: WebSocket, detector):
     await manager.connect(websocket)
     
     latest_image_bytes = None
+    latest_confidence = 0.25
     is_processing = False
     
     try:
         while True:
             try:
-                message = await asyncio.wait_for(websocket.receive_bytes(), timeout=0.001)
+                message = await asyncio.wait_for(websocket.receive_bytes(), timeout=1.0)
             except asyncio.TimeoutError:
                 await asyncio.sleep(0)
                 continue
@@ -46,7 +47,9 @@ async def handle_websocket(websocket: WebSocket, detector):
                 msg_type = message[0]
                 
                 if msg_type == 0x01:
-                    image_bytes = message[1:]
+                    conf_int = message[1] if len(message) > 1 else 25
+                    latest_confidence = conf_int / 100.0
+                    image_bytes = message[2:] if len(message) > 2 else message[1:]
                     latest_image_bytes = image_bytes
                     
                     if not is_processing and latest_image_bytes:
@@ -55,14 +58,14 @@ async def handle_websocket(websocket: WebSocket, detector):
                         
                         def process():
                             try:
-                                result = detector.detect(img_data, conf=0.25)
+                                result = detector.detect(img_data, conf=latest_confidence)
                                 return result
                             except Exception as e:
                                 logger.error(f"Detection error: {e}")
                                 return {"detections": []}
                         
                         asyncio.get_event_loop().run_in_executor(None, process).add_done_callback(
-                            lambda f: asyncio.create_task(send_result(f.result()))
+                            lambda f: asyncio.ensure_future(send_result(f.result()))
                         )
                     
                     async def send_result(result):
