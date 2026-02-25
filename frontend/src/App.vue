@@ -187,10 +187,10 @@ const captureFrame = () => {
     if (!video || video.readyState !== 4) return
     
     const canvas = document.createElement('canvas')
-    canvas.width = 192
-    canvas.height = 144
+    canvas.width = 128
+    canvas.height = 96
     const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, 0, 0, 192, 144)
+    ctx.drawImage(video, 0, 0, 128, 96)
     
     canvas.toBlob((blob) => {
       if (blob && isStreaming.value) {
@@ -217,8 +217,8 @@ const drawDetections = (dets) => {
   
   if (!dets || dets.length === 0) return
   
-  const scaleX = canvas.width / 192
-  const scaleY = canvas.height / 144
+  const scaleX = canvas.width / 128
+  const scaleY = canvas.height / 96
   
   for (const det of dets) {
     const [x1, y1, x2, y2] = det.bbox
