@@ -1,0 +1,10 @@
+tts:
+  enabled: true
+  api_key: "your-api-key"
+  voice: "Cherry"
+  speech_rate: 0
+  pitch_rate: 0
+
+detection:
+  tts_cooldown: 3
+  speak_new_only: true

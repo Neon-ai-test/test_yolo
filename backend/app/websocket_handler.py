@@ -1,8 +1,12 @@
 import asyncio
 import base64
+import time
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict
 import logging
+import threading
+
+from . import tts_handler
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,25 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+_last_tts_time = {}
+_tts_lock = threading.Lock()
+
+
+def should_speak(class_name: str) -> bool:
+    config = tts_handler.get_tts_config()
+    if not config.get('enabled', False):
+        return False
+    
+    cooldown = config.get('detection', {}).get('tts_cooldown', 3)
+    current_time = time.time()
+    
+    with _tts_lock:
+        last_time = _last_tts_time.get(class_name, 0)
+        if current_time - last_time < cooldown:
+            return False
+        _last_tts_time[class_name] = current_time
+        return True
+
 
 async def handle_websocket(websocket: WebSocket, detector):
     await manager.connect(websocket)
@@ -34,6 +57,7 @@ async def handle_websocket(websocket: WebSocket, detector):
     latest_image_bytes = None
     latest_confidence = 0.25
     is_processing = False
+    latest_detections = []
     
     try:
         while True:
@@ -69,13 +93,40 @@ async def handle_websocket(websocket: WebSocket, detector):
                         )
                     
                     async def send_result(result):
-                        nonlocal is_processing
+                        nonlocal is_processing, latest_detections
                         is_processing = False
                         try:
+                            detections = result.get("detections", [])
                             response = {
                                 "type": "result",
-                                "detections": result["detections"]
+                                "detections": detections
                             }
+                            
+                            new_classes = set(d["class_name_cn"] for d in detections)
+                            old_classes = set(d["class_name_cn"] for d in latest_detections)
+                            new_detected = new_classes - old_classes
+                            
+                            logger.info(f"Detections: {new_detected}, TTS enabled: {tts_handler.get_tts_config().get('enabled', False)}")
+                            
+                            if new_detected and tts_handler.get_tts_config().get('enabled', False):
+                                config = tts_handler.get_tts_config()
+                                for class_name in new_detected:
+                                    if should_speak(class_name):
+                                        text = f"我看到了{class_name}"
+                                        logger.info(f"[TTS] Speaking: {text}")
+                                        audio_data = await asyncio.get_event_loop().run_in_executor(
+                                            None, tts_handler.synthesize_speech, text
+                                        )
+                                        logger.info(f"[TTS] Audio generated, size: {len(audio_data) if audio_data else 0}")
+                                        if audio_data:
+                                            audio_b64 = base64.b64encode(audio_data).decode('utf-8')
+                                            await manager.send_message(websocket, {
+                                                "type": "tts",
+                                                "audio": audio_b64,
+                                                "text": text
+                                            })
+                            
+                            latest_detections = detections
                             await manager.send_message(websocket, response)
                         except Exception as e:
                             logger.error(f"Send error: {e}")

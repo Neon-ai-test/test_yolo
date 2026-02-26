@@ -114,7 +114,7 @@ let frameInterval = 100
 let imageSize = { width: 640, height: 480 }
 let lastPersonCount = 0
 const SCALE_FACTOR = 1
-const PLAY_SOUND = true
+const PLAY_SOUND = false
 
 const playDetectionSound = () => {
   if (!PLAY_SOUND) return
@@ -136,13 +136,42 @@ const playDetectionSound = () => {
   } catch (e) {
     console.log('Audio error:', e)
   }
+}
+
+const playTTSAudio = (audioBase64) => {
+  console.log('[TTS] Received audio, length:', audioBase64.length)
+  try {
+    const audioData = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0))
+    console.log('[TTS] Audio data length:', audioData.length)
+    
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+    const sampleRate = 24000
+    const numChannels = 1
+    const numSamples = audioData.length / 2
+    
+    const buffer = audioCtx.createBuffer(numChannels, numSamples, sampleRate)
+    const channelData = buffer.getChannelData(0)
+    
+    const int16Array = new Int16Array(audioData.buffer)
+    for (let i = 0; i < int16Array.length; i++) {
+      channelData[i] = (int16Array[i] / 32768.0) * 3  // 放大音量
+    }
+    
+    const source = audioCtx.createBufferSource()
+    source.buffer = buffer
+    source.connect(audioCtx.destination)
+    source.start()
+    console.log('[TTS] Playing...')
+  } catch (e) {
+    console.error('[TTS] Play error:', e)
+  }
 } // 图片放大倍数，可调整
 
 const initBenchmark = async () => {
   try {
     const [infoRes, benchmarkRes] = await Promise.all([
-      fetch('http://localhost:8000/api/info'),
-      fetch('http://localhost:8000/api/benchmark')
+      fetch('/api/info'),
+      fetch('/api/benchmark')
     ])
     const info = await infoRes.json()
     const benchmark = await benchmarkRes.json()
@@ -174,7 +203,7 @@ const startCamera = async () => {
     
     isStreaming.value = true
     
-    wsConnected.value = connect('ws://localhost:8000/ws/detect')
+    wsConnected.value = connect('ws://localhost:3000/ws/detect')
     setConfidence(confidence.value)
     
     captureFrame()
@@ -322,6 +351,14 @@ const drawDetections = (dets) => {
 }
 
 onMessage((data) => {
+  console.log('[WS] Received:', data.type)
+  
+  if (data.type === 'tts' && data.audio) {
+    console.log('[TTS] Got audio, text:', data.text)
+    playTTSAudio(data.audio)
+    return
+  }
+  
   if (data.type === 'result') {
     isProcessing = false
     const dets = data.detections || []
