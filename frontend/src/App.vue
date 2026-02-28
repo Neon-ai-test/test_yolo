@@ -113,6 +113,7 @@ let isProcessing = false
 let frameInterval = 100
 let imageSize = { width: 640, height: 480 }
 let lastPersonCount = 0
+let cachedCanvasSize = { width: 0, height: 0 }
 const SCALE_FACTOR = 1
 const PLAY_SOUND = false
 
@@ -227,6 +228,7 @@ const stopCamera = () => {
   wsConnected.value = false
   detections.value = []
   isProcessing = false
+  cachedCanvasSize = { width: 0, height: 0 }
   
   const canvas = canvasRef.value
   if (canvas) {
@@ -288,8 +290,13 @@ const drawDetections = (dets) => {
   
   const ctx = canvas.getContext('2d')
   
-  canvas.width = canvas.clientWidth
-  canvas.height = canvas.clientHeight
+  const newWidth = canvas.clientWidth
+  const newHeight = canvas.clientHeight
+  if (cachedCanvasSize.width !== newWidth || cachedCanvasSize.height !== newHeight) {
+    canvas.width = newWidth
+    canvas.height = newHeight
+    cachedCanvasSize = { width: newWidth, height: newHeight }
+  }
   
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   
