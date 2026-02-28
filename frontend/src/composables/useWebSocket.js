@@ -4,18 +4,30 @@ export default function useWebSocket() {
   const socket = ref(null)
   const messageHandlers = ref([])
   let currentConfidence = 0.25
+  let reconnectTimer = null
+  let reconnectAttempts = 0
+  const maxReconnectAttempts = 5
+  const reconnectDelay = 2000
+  let url = ''
 
-  const connect = (url) => {
+  const connect = (wsUrl) => {
+    url = wsUrl
     if (socket.value?.readyState === WebSocket.OPEN) {
       return true
     }
 
-    socket.value = new WebSocket(url)
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+
+    socket.value = new WebSocket(wsUrl)
 
     socket.value.binaryType = 'arraybuffer'
 
     socket.value.onopen = () => {
       console.log('WebSocket connected')
+      reconnectAttempts = 0
     }
 
     socket.value.onmessage = (event) => {
@@ -25,6 +37,8 @@ export default function useWebSocket() {
 
     socket.value.onclose = () => {
       console.log('WebSocket disconnected')
+      socket.value = null
+      tryReconnect()
     }
 
     socket.value.onerror = (error) => {
@@ -34,7 +48,24 @@ export default function useWebSocket() {
     return true
   }
 
+  const tryReconnect = () => {
+    if (reconnectAttempts >= maxReconnectAttempts) {
+      console.log('Max reconnect attempts reached')
+      return
+    }
+    reconnectAttempts++
+    console.log(`Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`)
+    reconnectTimer = setTimeout(() => {
+      connect(url)
+    }, reconnectDelay)
+  }
+
   const disconnect = () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+    reconnectAttempts = maxReconnectAttempts
     if (socket.value) {
       socket.value.close()
       socket.value = null

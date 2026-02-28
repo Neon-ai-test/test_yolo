@@ -6,7 +6,7 @@ import time
 import base64
 
 
-IMGSZ = 128  # 检测尺寸: 640/480/320/256/192/128/100，越小越快
+IMGSZ = 320  # 检测尺寸: 640/480/320/256/192/128/100，越小越快
 
 
 COCO_CLASSES_CN = {
@@ -50,7 +50,7 @@ class YOLODetector:
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         h, w = image.shape[:2]
 
-        results = self.model(image, conf=conf, verbose=False, device=self.device, imgsz=IMGSZ)
+        results = self.model(image, conf=conf, iou=0.4, verbose=False, device=self.device, imgsz=IMGSZ)
 
         detections = []
         for result in results:
