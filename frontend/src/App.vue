@@ -56,6 +56,64 @@
         >
           {{ isStreaming ? '停止识别' : '开始识别' }}
         </button>
+        <button 
+          @click="showSettings = true"
+          class="px-4 py-2 rounded-full font-medium bg-gray-600 hover:bg-gray-500 transition-colors"
+        >
+          设置
+        </button>
+      </div>
+    </div>
+    
+    <!-- 设置弹窗 -->
+    <div v-if="showSettings" class="absolute inset-0 flex items-center justify-center bg-black/60 z-50">
+      <div class="bg-gray-800 rounded-xl p-6 w-80 max-w-[90vw]">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-white text-lg font-medium">设置</h3>
+          <button @click="showSettings = false" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+        
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <span class="text-white">语音播报</span>
+            <button 
+              @click="ttsEnabled = !ttsEnabled; saveSettings()"
+              class="w-12 h-6 rounded-full transition-colors"
+              :class="ttsEnabled ? 'bg-green-500' : 'bg-gray-600'"
+            >
+              <span 
+                class="inline-block w-5 h-5 bg-white rounded-full transition-transform"
+                :class="ttsEnabled ? 'translate-x-6' : 'translate-x-0.5'"
+              ></span>
+            </button>
+          </div>
+          
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-white">检测尺寸</span>
+              <span class="text-gray-400 text-sm">{{ imgsz }}px</span>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <button 
+                v-for="size in imgszOptions" 
+                :key="size"
+                @click="imgsz = size; saveSettings()"
+                class="px-3 py-1 rounded text-sm transition-colors"
+                :class="imgsz === size ? 'bg-blue-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'"
+              >
+                {{ size }}
+              </button>
+            </div>
+            <p class="text-gray-500 text-xs mt-2">数值越大精度越高，速度越慢</p>
+          </div>
+        </div>
+        
+        <button 
+          @click="showSettings = false" 
+          class="w-full mt-6 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors"
+        >
+          完成
+        </button>
       </div>
     </div>
     
@@ -94,10 +152,40 @@ const recommendedFps = ref(10)
 const device = ref('cpu')
 const CONFIDENCE = parseFloat(localStorage.getItem('yolo_confidence') || '0.25')
 const confidence = ref(CONFIDENCE)
+const showSettings = ref(false)
+const ttsEnabled = ref(false)
+const imgsz = ref(320)
+const imgszOptions = [128, 160, 192, 224, 256, 288, 320, 416, 512, 640]
 
 const saveConfidence = () => {
   localStorage.setItem('yolo_confidence', confidence.value.toString())
   setConfidence(confidence.value)
+}
+
+const loadSettings = async () => {
+  try {
+    const res = await fetch('/api/config')
+    const data = await res.json()
+    ttsEnabled.value = data.tts_enabled
+    imgsz.value = data.imgsz
+  } catch (e) {
+    console.error('Failed to load config:', e)
+  }
+}
+
+const saveSettings = async () => {
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tts_enabled: ttsEnabled.value,
+        imgsz: imgsz.value
+      })
+    })
+  } catch (e) {
+    console.error('Failed to save config:', e)
+  }
 }
 
 const { connect, disconnect, sendFrame, setConfidence, onMessage } = useWebSocket()
@@ -398,6 +486,7 @@ onMessage((data) => {
 
 onMounted(() => {
   initBenchmark()
+  loadSettings()
 })
 
 onUnmounted(() => {

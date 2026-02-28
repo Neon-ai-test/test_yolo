@@ -6,8 +6,8 @@ import time
 import base64
 
 
-IMGSZ = 320  # 检测尺寸: 640/480/320/256/192/128/100，越小越快
-
+DEFAULT_IMGSZ = 320
+IMGSZ_OPTIONS = [128, 160, 192, 224, 256, 288, 320, 416, 512, 640]
 
 COCO_CLASSES_CN = {
     0: "人", 1: "自行车", 2: "汽车", 3: "摩托车", 4: "飞机",
@@ -35,6 +35,7 @@ class YOLODetector:
         self.class_names = self.model.names
         self.avg_process_time = 0
         self.benchmark_done = False
+        self.imgsz = DEFAULT_IMGSZ
         
         self._detect_device()
         
@@ -50,7 +51,8 @@ class YOLODetector:
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         h, w = image.shape[:2]
 
-        results = self.model(image, conf=conf, iou=0.4, verbose=False, device=self.device, imgsz=IMGSZ)
+        print(f"[Detector] imgsz={self.imgsz}")
+        results = self.model(image, conf=conf, iou=0.4, verbose=False, device=self.device, imgsz=self.imgsz)
 
         detections = []
         for result in results:
@@ -75,8 +77,16 @@ class YOLODetector:
     def get_info(self) -> dict:
         return {
             "device": self.device,
-            "model": "yolov8n"
+            "model": "yolov8n",
+            "imgsz": self.imgsz,
+            "imgsz_options": IMGSZ_OPTIONS
         }
+
+    def set_imgsz(self, imgsz: int):
+        if imgsz in IMGSZ_OPTIONS:
+            self.imgsz = imgsz
+            return True
+        return False
 
     def benchmark(self, test_data: bytes = None, iterations: int = 5) -> dict:
         if test_data is None:

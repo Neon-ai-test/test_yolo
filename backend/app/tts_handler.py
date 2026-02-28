@@ -26,6 +26,13 @@ def get_tts_config():
     return _config.get('tts', {})
 
 
+def set_tts_enabled(enabled: bool):
+    global _config
+    if _config is None:
+        load_config()
+    _config['tts']['enabled'] = enabled
+
+
 class TTSCallback(QwenTtsRealtimeCallback):
     def __init__(self):
         self.audio_chunks = []

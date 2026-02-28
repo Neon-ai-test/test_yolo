@@ -3,14 +3,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import base64
+from pydantic import BaseModel
 
 from .detector import YOLODetector
 from .websocket_handler import handle_websocket
+from . import tts_handler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 detector = None
+
+
+class ConfigUpdate(BaseModel):
+    tts_enabled: bool = None
+    imgsz: int = None
 
 
 @asynccontextmanager
@@ -56,6 +63,25 @@ async def get_info():
 async def get_benchmark():
     result = detector.benchmark(iterations=5)
     return result
+
+
+@app.get("/api/config")
+async def get_config():
+    tts_config = tts_handler.get_tts_config()
+    return {
+        "tts_enabled": tts_config.get('enabled', False),
+        "imgsz": detector.imgsz,
+        "imgsz_options": [100, 128, 192, 256, 320, 480, 640]
+    }
+
+
+@app.post("/api/config")
+async def update_config(config: ConfigUpdate):
+    if config.tts_enabled is not None:
+        tts_handler.set_tts_enabled(config.tts_enabled)
+    if config.imgsz is not None:
+        detector.set_imgsz(config.imgsz)
+    return {"success": True}
 
 
 @app.websocket("/ws/detect")
