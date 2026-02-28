@@ -108,12 +108,15 @@ const uniqueClasses = computed(() => {
 })
 
 let stream = null
-let captureTimer = null
+let rafId = null
+let lastCaptureTime = 0
 let isProcessing = false
 let frameInterval = 100
 let imageSize = { width: 640, height: 480 }
 let lastPersonCount = 0
 let cachedCanvasSize = { width: 0, height: 0 }
+let offscreenCanvas = null
+let offscreenCtx = null
 const SCALE_FACTOR = 1
 const PLAY_SOUND = false
 
@@ -219,9 +222,9 @@ const stopCamera = () => {
     stream.getTracks().forEach(track => track.stop())
     stream = null
   }
-  if (captureTimer) {
-    clearInterval(captureTimer)
-    captureTimer = null
+  if (rafId) {
+    cancelAnimationFrame(rafId)
+    rafId = null
   }
   isStreaming.value = false
   disconnect()
@@ -229,6 +232,9 @@ const stopCamera = () => {
   detections.value = []
   isProcessing = false
   cachedCanvasSize = { width: 0, height: 0 }
+  offscreenCanvas = null
+  offscreenCtx = null
+  lastCaptureTime = 0
   
   const canvas = canvasRef.value
   if (canvas) {
@@ -240,48 +246,54 @@ const stopCamera = () => {
 const captureFrame = () => {
   if (!isStreaming.value) return
   
-  captureTimer = setInterval(() => {
-    if (isProcessing) return
+  const now = performance.now()
+  if (!isProcessing && now - lastCaptureTime >= frameInterval) {
+    lastCaptureTime = now
     
     const video = videoRef.value
-    if (!video || video.readyState !== 4) return
-    
-    const videoWidth = video.videoWidth || 640
-    const videoHeight = video.videoHeight || 480
-    
-    const containerWidth = video.clientWidth
-    const containerHeight = video.clientHeight
-    
-    const containerRatio = containerWidth / containerHeight
-    const videoRatio = videoWidth / videoHeight
-    
-    let srcX = 0, srcY = 0, srcW = videoWidth, srcH = videoHeight
-    
-    if (containerRatio > videoRatio) {
-      srcH = containerHeight * videoWidth / containerWidth
-      srcY = (videoHeight - srcH) / 2
-    } else {
-      srcW = containerWidth * videoHeight / containerHeight
-      srcX = (videoWidth - srcW) / 2
-    }
-    
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.floor(srcW * SCALE_FACTOR)
-    canvas.height = Math.floor(srcH * SCALE_FACTOR)
-    imageSize = { width: canvas.width, height: canvas.height }
-    
-    const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height)
-    
-    canvas.toBlob((blob) => {
-      if (blob && isStreaming.value) {
-        blob.arrayBuffer().then(buffer => {
-          isProcessing = true
-          sendFrame(buffer)
-        })
+    if (video && video.readyState === 4) {
+      const videoWidth = video.videoWidth || 640
+      const videoHeight = video.videoHeight || 480
+      
+      const containerWidth = video.clientWidth
+      const containerHeight = video.clientHeight
+      
+      const containerRatio = containerWidth / containerHeight
+      const videoRatio = videoWidth / videoHeight
+      
+      let srcX = 0, srcY = 0, srcW = videoWidth, srcH = videoHeight
+      
+      if (containerRatio > videoRatio) {
+        srcH = containerHeight * videoWidth / containerWidth
+        srcY = (videoHeight - srcH) / 2
+      } else {
+        srcW = containerWidth * videoHeight / containerHeight
+        srcX = (videoWidth - srcW) / 2
       }
-    }, 'image/jpeg', 0.7)
-  }, frameInterval)
+      
+      if (!offscreenCanvas) {
+        offscreenCanvas = document.createElement('canvas')
+        offscreenCtx = offscreenCanvas.getContext('2d')
+      }
+      
+      offscreenCanvas.width = Math.floor(srcW * SCALE_FACTOR)
+      offscreenCanvas.height = Math.floor(srcH * SCALE_FACTOR)
+      imageSize = { width: offscreenCanvas.width, height: offscreenCanvas.height }
+      
+      offscreenCtx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, offscreenCanvas.width, offscreenCanvas.height)
+      
+      offscreenCanvas.toBlob((blob) => {
+        if (blob && isStreaming.value) {
+          blob.arrayBuffer().then(buffer => {
+            isProcessing = true
+            sendFrame(buffer)
+          })
+        }
+      }, 'image/jpeg', 0.7)
+    }
+  }
+  
+  rafId = requestAnimationFrame(captureFrame)
 }
 
 const drawDetections = (dets) => {
