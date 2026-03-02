@@ -1,5 +1,13 @@
 <template>
   <div class="fixed inset-0 bg-black overflow-hidden">
+    <!-- Toast 错误提示 -->
+    <Transition name="toast">
+      <div v-if="toast.show" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg max-w-[90vw]"
+        :class="toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'">
+        <p class="text-white text-sm">{{ toast.message }}</p>
+      </div>
+    </Transition>
+
     <!-- 视频区域 -->
     <video 
       ref="videoRef" 
@@ -19,10 +27,12 @@
     </div>
     
     <!-- 顶部状态栏 -->
-    <div class="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/70 to-transparent">
+    <div class="absolute top-0 left-0 right-0 p-2 sm:p-3 bg-gradient-to-b from-black/70 to-transparent">
       <div class="flex items-center justify-between text-white">
-        <span class="text-sm font-medium">YOLO 视觉识别</span>
-        <div class="flex items-center gap-3">
+        <span class="text-xs sm:text-sm font-medium">YOLO 视觉识别</span>
+        <div class="flex items-center gap-2 sm:gap-3">
+          <!-- 实时 FPS -->
+          <span class="text-xs sm:text-sm text-yellow-400">{{ currentFps }} FPS</span>
           <div class="flex items-center gap-1">
             <span class="text-xs">{{ (confidence * 100).toFixed(0) }}%</span>
             <input 
@@ -32,13 +42,12 @@
               step="0.05" 
               v-model="confidence"
               @input="saveConfidence"
-              class="w-20 h-1 bg-white/30 rounded-lg appearance-none cursor-pointer"
+              class="w-14 sm:w-20 h-1 bg-white/30 rounded-lg appearance-none cursor-pointer"
             >
           </div>
-          <span class="text-sm px-2 py-0.5 rounded" :class="device === 'cuda' ? 'bg-green-500/70' : 'bg-yellow-500/70'">
+          <span class="text-xs sm:text-sm px-2 py-0.5 rounded" :class="device === 'cuda' ? 'bg-green-500/70' : 'bg-yellow-500/70'">
             {{ device === 'cuda' ? 'GPU' : 'CPU' }}
           </span>
-          <span class="text-sm">{{ recommendedFps }} FPS</span>
           <span class="text-sm" :class="wsConnected ? 'text-green-400' : 'text-red-400'">
             {{ wsConnected ? '●' : '○' }}
           </span>
@@ -47,35 +56,45 @@
     </div>
     
     <!-- 底部控制栏 -->
-    <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent">
-      <div class="flex justify-center gap-4">
+    <div class="absolute bottom-0 left-0 right-0 p-2 sm:p-3 bg-gradient-to-t from-black/70 to-transparent">
+      <div class="flex justify-center gap-2 sm:gap-4">
+        <!-- 摄像头切换按钮 -->
+        <button 
+          @click="switchCamera"
+          :disabled="isStreaming"
+          class="px-3 sm:px-4 py-2 rounded-full font-medium transition-colors bg-gray-600 hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+        >
+          <span class="hidden sm:inline">{{ currentCamera === 'user' ? '🔄 后置' : '🔄 前置' }}</span>
+          <span class="sm:hidden">🔄</span>
+        </button>
         <button 
           @click="toggleCamera"
-          class="px-6 py-2 rounded-full font-medium transition-colors"
+          class="px-4 sm:px-6 py-2 rounded-full font-medium transition-colors text-sm"
           :class="isStreaming ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'"
         >
           {{ isStreaming ? '停止识别' : '开始识别' }}
         </button>
         <button 
           @click="showSettings = true"
-          class="px-4 py-2 rounded-full font-medium bg-gray-600 hover:bg-gray-500 transition-colors"
+          class="px-3 sm:px-4 py-2 rounded-full font-medium bg-gray-600 hover:bg-gray-500 transition-colors text-sm"
         >
-          设置
+          ⚙️
         </button>
       </div>
     </div>
     
     <!-- 设置弹窗 -->
-    <div v-if="showSettings" class="absolute inset-0 flex items-center justify-center bg-black/60 z-50">
-      <div class="bg-gray-800 rounded-xl p-6 w-80 max-w-[90vw]">
+    <div v-if="showSettings" class="absolute inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
+      <div class="bg-gray-800 rounded-xl p-4 sm:p-6 w-80 max-w-[90vw] max-h-[80vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-4">
           <h3 class="text-white text-lg font-medium">设置</h3>
           <button @click="showSettings = false" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
         
         <div class="space-y-4">
+          <!-- 语音播报开关 -->
           <div class="flex items-center justify-between">
-            <span class="text-white">语音播报</span>
+            <span class="text-white text-sm">语音播报</span>
             <button 
               @click="ttsEnabled = !ttsEnabled; saveSettings()"
               class="relative w-12 h-6 rounded-full transition-colors"
@@ -88,17 +107,52 @@
             </button>
           </div>
           
+          <!-- TTS 音量控制 -->
+          <div v-if="ttsEnabled">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-white text-sm">播报音量</span>
+              <span class="text-gray-400 text-sm">{{ (ttsVolume * 100).toFixed(0) }}%</span>
+            </div>
+            <input 
+              type="range" 
+              min="0.1" 
+              max="2" 
+              step="0.1" 
+              v-model="ttsVolume"
+              @input="saveSettings"
+              class="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer"
+            >
+          </div>
+          
+          <!-- JPEG 图像质量 -->
           <div>
             <div class="flex items-center justify-between mb-2">
-              <span class="text-white">检测尺寸</span>
+              <span class="text-white text-sm">图像质量</span>
+              <span class="text-gray-400 text-sm">{{ Math.round(jpegQuality * 100) }}%</span>
+            </div>
+            <input 
+              type="range" 
+              min="0.3" 
+              max="1" 
+              step="0.1" 
+              v-model="jpegQuality"
+              class="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer"
+            >
+            <p class="text-gray-500 text-xs mt-1">影响传输画质和速度</p>
+          </div>
+          
+          <!-- 检测尺寸 -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-white text-sm">检测尺寸</span>
               <span class="text-gray-400 text-sm">{{ imgsz }}px</span>
             </div>
-            <div class="flex gap-2 flex-wrap">
+            <div class="flex gap-1 sm:gap-2 flex-wrap">
               <button 
                 v-for="size in imgszOptions" 
                 :key="size"
                 @click="imgsz = size; saveSettings()"
-                class="px-3 py-1 rounded text-sm transition-colors"
+                class="px-2 sm:px-3 py-1 rounded text-xs transition-colors"
                 :class="imgsz === size ? 'bg-blue-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'"
               >
                 {{ size }}
@@ -119,19 +173,22 @@
     
     <!-- 右侧识别结果面板 -->
     <div 
-      class="absolute top-16 right-3 w-48 max-h-[60vh] overflow-y-auto rounded-lg bg-black/50 backdrop-blur-sm p-3"
+      class="absolute top-12 sm:top-14 right-1 sm:right-3 w-36 sm:w-48 max-h-[50vh] sm:max-h-[60vh] overflow-y-auto rounded-lg bg-black/50 backdrop-blur-sm p-2 sm:p-3"
       :class="detections.length > 0 ? 'block' : 'hidden'"
     >
-      <div class="text-white text-sm">
+      <div class="text-white text-xs sm:text-sm">
         <div class="font-medium mb-2">识别结果 ({{ detections.length }})</div>
         <div class="space-y-1">
           <div 
-            v-for="(det, idx) in detections" 
+            v-for="(det, idx) in uniqueDetections" 
             :key="idx"
             class="flex justify-between items-center py-1 px-2 bg-white/10 rounded"
           >
-            <span>{{ det.class_name_cn || det.class_name }}</span>
-            <span class="text-gray-400">{{ (det.confidence * 100).toFixed(0) }}%</span>
+            <div class="flex items-center gap-1 sm:gap-2 min-w-0">
+              <span class="w-2 h-2 rounded-full flex-shrink-0" :style="{ backgroundColor: getClassColor(det.class_name) }"></span>
+              <span class="truncate">{{ det.class_name_cn || det.class_name }}</span>
+            </div>
+            <span class="text-gray-400 ml-1 flex-shrink-0">{{ (det.confidence * 100).toFixed(0) }}%</span>
           </div>
         </div>
       </div>
@@ -143,20 +200,90 @@
 import { ref, computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import useWebSocket from './composables/useWebSocket'
 
+// 类别颜色映射
+const classColors = {
+  person: '#3B82F6',     // 蓝色 - 人
+  car: '#EF4444',        // 红色 - 车
+  truck: '#DC2626',      // 深红 - 卡车
+  bus: '#F97316',        // 橙色 - 公交车
+  motorcycle: '#8B5CF6', // 紫色 - 摩托车
+  bicycle: '#10B981',    // 绿色 - 自行车
+  dog: '#EC4899',       // 粉色 - 狗
+  cat: '#F43F5E',       // 红粉 - 猫
+  bird: '#14B8A6',      // 青色 - 鸟
+  horse: '#A855F7',     // 紫色 - 马
+  sheep: '#22C55E',     // 绿色 - 羊
+  cow: '#84CC16',       // 草绿 - 牛
+  default: '#22D3EE'    // 青色 - 默认
+}
+
+const getClassColor = (className) => {
+  return classColors[className?.toLowerCase()] || classColors.default
+}
+
+// 响应式状态
 const videoRef = ref(null)
 const canvasRef = ref(null)
 const isStreaming = ref(false)
 const detections = shallowRef([])
 const wsConnected = ref(false)
 const recommendedFps = ref(10)
+const currentFps = ref(0)
 const device = ref('cpu')
 const CONFIDENCE = parseFloat(localStorage.getItem('yolo_confidence') || '0.25')
 const confidence = ref(CONFIDENCE)
 const showSettings = ref(false)
 const ttsEnabled = ref(false)
+const ttsVolume = ref(parseFloat(localStorage.getItem('yolo_tts_volume') || '1'))
+const jpegQuality = ref(parseFloat(localStorage.getItem('yolo_jpeg_quality') || '0.7'))
 const imgsz = ref(320)
 const imgszOptions = [128, 160, 192, 224, 256, 288, 320, 416, 512, 640]
 
+// 摄像头状态
+const currentCamera = ref('user')
+
+// Toast 状态
+const toast = ref({
+  show: false,
+  message: '',
+  type: 'error'
+})
+
+let toastTimer = null
+
+const showToast = (message, type = 'error') => {
+  if (toastTimer) clearTimeout(toastTimer)
+  toast.value = { show: true, message, type }
+  toastTimer = setTimeout(() => {
+    toast.value.show = false
+  }, 3000)
+}
+
+// FPS 计算
+let frameCount = 0
+let fpsLastTime = performance.now()
+
+const updateFps = () => {
+  frameCount++
+  const now = performance.now()
+  if (now - fpsLastTime >= 1000) {
+    currentFps.value = frameCount
+    frameCount = 0
+    fpsLastTime = now
+  }
+}
+
+// 去重检测结果
+const uniqueDetections = computed(() => {
+  const seen = new Map()
+  for (const det of detections.value) {
+    const key = det.class_name
+    if (!seen.has(key) || seen.get(key).confidence < det.confidence) {
+      seen.set(key, det)
+    }
+  }
+  return Array.from(seen.values())
+})
 const saveConfidence = () => {
   localStorage.setItem('yolo_confidence', confidence.value.toString())
   setConfidence(confidence.value)
@@ -175,16 +302,28 @@ const loadSettings = async () => {
 
 const saveSettings = async () => {
   try {
+    localStorage.setItem('yolo_tts_volume', ttsVolume.value.toString())
+    localStorage.setItem('yolo_jpeg_quality', jpegQuality.value.toString())
     await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         tts_enabled: ttsEnabled.value,
+        tts_volume: ttsVolume.value,
         imgsz: imgsz.value
       })
     })
   } catch (e) {
     console.error('Failed to save config:', e)
+  }
+}
+
+// 摄像头切换
+const switchCamera = async () => {
+  currentCamera.value = currentCamera.value === 'user' ? 'environment' : 'user'
+  if (isStreaming.value) {
+    stopCamera()
+    await startCamera()
   }
 }
 
@@ -252,8 +391,9 @@ const playTTSAudio = (audioBase64) => {
     const channelData = buffer.getChannelData(0)
     
     const int16Array = new Int16Array(audioData.buffer)
+    const volume = ttsVolume.value * 3
     for (let i = 0; i < int16Array.length; i++) {
-      channelData[i] = (int16Array[i] / 32768.0) * 3  // 放大音量
+      channelData[i] = (int16Array[i] / 32768.0) * volume
     }
     
     const source = audioCtx.createBufferSource()
@@ -264,7 +404,7 @@ const playTTSAudio = (audioBase64) => {
   } catch (e) {
     console.error('[TTS] Play error:', e)
   }
-} // 图片放大倍数，可调整
+}
 
 const initBenchmark = async () => {
   try {
@@ -295,7 +435,7 @@ const toggleCamera = async () => {
 const startCamera = async () => {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: 640, height: 480 }
+      video: { facingMode: currentCamera.value, width: 640, height: 480 }
     })
     videoRef.value.srcObject = stream
     await videoRef.value.play()
@@ -310,10 +450,11 @@ const startCamera = async () => {
     } catch (e) {
       console.error('WebSocket connection failed:', e)
       wsConnected.value = false
+      showToast('WebSocket 连接失败', 'error')
     }
   } catch (err) {
     console.error('Camera error:', err)
-    alert('无法访问摄像头')
+    showToast('无法访问摄像头', 'error')
   }
 }
 
@@ -388,9 +529,10 @@ const captureFrame = () => {
           blob.arrayBuffer().then(buffer => {
             isProcessing = true
             sendFrame(buffer)
+            updateFps()
           })
         }
-      }, 'image/jpeg', 0.7)
+      }, 'image/jpeg', jpegQuality.value)
     }
   }
   
@@ -454,7 +596,9 @@ const drawDetections = (dets) => {
     const sx2 = x2 * scaleX + offsetX
     const sy2 = y2 * scaleY + offsetY
     
-    ctx.strokeStyle = '#00FF00'
+    // 使用类别颜色
+    const color = getClassColor(det.class_name)
+    ctx.strokeStyle = color
     ctx.lineWidth = 2
     ctx.strokeRect(sx1, sy1, sx2 - sx1, sy2 - sy1)
     
@@ -462,10 +606,12 @@ const drawDetections = (dets) => {
     const label = `${className} ${(confidence * 100).toFixed(0)}%`
     const textWidth = ctx.measureText(label).width
     
-    ctx.fillStyle = 'rgba(0, 255, 0, 0.8)'
+    ctx.fillStyle = color
+    ctx.globalAlpha = 0.8
     ctx.fillRect(sx1, sy1 - 14, textWidth + 4, 14)
+    ctx.globalAlpha = 1
     
-    ctx.fillStyle = '#000000'
+    ctx.fillStyle = '#FFFFFF'
     ctx.fillText(label, sx1 + 2, sy1 - 2)
   }
 }
@@ -504,5 +650,20 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopCamera()
+  if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
+
+
+<style scoped>
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -20px);
+}
+</style>
