@@ -16,3 +16,6 @@ node_modules/
 *.log
 .DS_Store
 config.yaml
+# 日志和PID文件
+logs/
+.pids/
