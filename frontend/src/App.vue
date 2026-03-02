@@ -188,6 +188,13 @@ const saveSettings = async () => {
   }
 }
 
+// Auto-detect WebSocket URL based on current page location
+const getWebSocketUrl = () => {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+  const host = window.location.host
+  return `${protocol}//${host}/ws/detect`
+}
+
 const { connect, disconnect, sendFrame, setConfidence, onMessage, isConnected } = useWebSocket()
 
 const uniqueClasses = computed(() => {
@@ -296,7 +303,7 @@ const startCamera = async () => {
     isStreaming.value = true
     
     try {
-      await connect('ws://localhost:3000/ws/detect')
+      await connect(getWebSocketUrl())
       wsConnected.value = true
       setConfidence(confidence.value)
       captureFrame()
