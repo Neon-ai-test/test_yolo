@@ -297,7 +297,7 @@ check_dependencies() {
     fi
     
     if [ ! -d "$FRONTEND_DIR" ]; then
-        log_error "找不到前端目录: $FRONTONTEND_DIR"
+        log_error "找不到前端目录: $FRONTEND_DIR"
         exit 1
     fi
     
@@ -320,9 +320,53 @@ install_dependencies() {
     log_step "检查项目依赖..."
     echo ""
     
+    # 测试 pip 源连通性
+    log_info "测试 PyPI 连接..."
+    PYPI_SOURCE="https://pypi.org/simple"
+    CHINA_PYPI="https://pypi.tuna.tsinghua.edu.cn"
+    
+    if curl -s --max-time 5 "$PYPI_SOURCE" > /dev/null 2>&1; then
+        PIP_INDEX="-i $PYPI_SOURCE"
+        echo -e "  ${GREEN}✓${NC} PyPI 连接正常"
+    else
+        echo -e "  ${YELLOW}!${NC} PyPI 连接失败，尝试国内源..."
+        if curl -s --max-time 5 "$CHINA_PYPI" > /dev/null 2>&1; then
+            PIP_INDEX="-i $CHINA_PYPI"
+            echo -e "  ${GREEN}✓${NC} 清华源连接正常"
+        else
+            PIP_INDEX=""
+            echo -e "  ${YELLOW}!${NC} 无法连接任何 PyPI 源，使用默认"
+        fi
+    fi
+    
+    # 测试 npm 源连通性
+    log_info "测试 npm 注册表..."
+    NPM_REGISTRY="https://registry.npmjs.org"
+    CHINA_NPM="https://registry.npmmirror.com"
+    
+    if curl -s --max-time 5 "$NPM_REGISTRY" > /dev/null 2>&1; then
+        NPM_REG="$NPM_REGISTRY"
+        echo -e "  ${GREEN}✓${NC} npm 注册表连接正常"
+    else
+        echo -e "  ${YELLOW}!${NC} npm 注册表连接失败，尝试国内源..."
+        if curl -s --max-time 5 "$CHINA_NPM" > /dev/null 2>&1; then
+            NPM_REG="$CHINA_NPM"
+            echo -e "  ${GREEN}✓${NC} 淘宝/NPM 镜像连接正常"
+        else
+            NPM_REG="$NPM_REGISTRY"
+            echo -e "  ${YELLOW}!${NC} 无法连接任何 npm 源，使用默认"
+        fi
+    fi
+    echo ""
+    
+    # 安装后端依赖
     if ! python3 -c "import fastapi" 2>/dev/null; then
         echo -n "  安装后端依赖"
-        pip3 install --user -q fastapi "uvicorn[standard]" websockets ultralytics opencv-python-headless numpy python-multipart pyyaml dashscope 2>/dev/null
+        if [ -n "$PIP_INDEX" ]; then
+            pip3 install --user -q $PIP_INDEX fastapi "uvicorn[standard]" websockets ultralytics opencv-python-headless numpy python-multipart pyyaml dashscope 2>/dev/null
+        else
+            pip3 install --user -q fastapi "uvicorn[standard]" websockets ultralytics opencv-python-headless numpy python-multipart pyyaml dashscope 2>/dev/null
+        fi
         if [ $? -eq 0 ]; then
             echo " ✓"
         else
@@ -333,9 +377,10 @@ install_dependencies() {
         echo -e "  ${GREEN}✓${NC} 后端依赖已安装"
     fi
     
+    # 安装前端依赖
     if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
         echo -n "  安装前端依赖"
-        (cd "$FRONTEND_DIR" && npm install --silent 2>/dev/null)
+        (cd "$FRONTEND_DIR" && npm config set registry "$NPM_REG" && npm install --silent 2>/dev/null)
         if [ $? -eq 0 ]; then
             echo " ✓"
         else

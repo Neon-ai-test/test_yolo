@@ -280,11 +280,58 @@ goto :eof
 call :log_step "检查项目依赖..."
 echo.
 
+:: 测试 pip 源连通性
+call :log_info 测试 PyPI 连接...
+set "PIP_INDEX="
+set "PYPI_SOURCE=https://pypi.org/simple"
+set "CHINA_PYPI=https://pypi.tuna.tsinghua.edu.cn"
+
+curl -s --max-time 5 "%PYPI_SOURCE%" >nul 2>&1
+if !errorlevel! equ 0 (
+    set "PIP_INDEX=-i %PYPI_SOURCE%"
+    echo   %GREEN%✓%NC% PyPI 连接正常
+) else (
+    echo   %YELLOW%!%NC% PyPI 连接失败，尝试国内源...
+    curl -s --max-time 5 "%CHINA_PYPI%" >nul 2>&1
+    if !errorlevel! equ 0 (
+        set "PIP_INDEX=-i %CHINA_PYPI%"
+        echo   %GREEN%✓%NC% 清华源连接正常
+    ) else (
+        echo   %YELLOW%!%NC% 无法连接任何 PyPI 源，使用默认
+    )
+)
+
+:: 测试 npm 源连通性
+call :log_info 测试 npm 注册表...
+set "NPM_REG=https://registry.npmjs.org"
+set "CHINA_NPM=https://registry.npmmirror.com"
+
+curl -s --max-time 5 "%NPM_REG%" >nul 2>&1
+if !errorlevel! equ 0 (
+    set "NPM_REG=%NPM_REG%"
+    echo   %GREEN%✓%NC% npm 注册表连接正常
+) else (
+    echo   %YELLOW%!%NC% npm 注册表连接失败，尝试国内源...
+    curl -s --max-time 5 "%CHINA_NPM%" >nul 2>&1
+    if !errorlevel! equ 0 (
+        set "NPM_REG=%CHINA_NPM%"
+        echo   %GREEN%✓%NC% 淘宝/NPM 镜像连接正常
+    ) else (
+        set "NPM_REG=%NPM_REG%"
+        echo   %YELLOW%!%NC% 无法连接任何 npm 源，使用默认
+    )
+)
+echo.
+
 :: 后端依赖
 python -c "import fastapi" >nul 2>&1
 if !errorlevel! neq 0 (
     echo -n "   安装后端依赖"
-    pip install -q fastapi "uvicorn[standard]" websockets ultralytics opencv-python-headless numpy python-multipart pyyaml dashscope >nul 2>&1
+    if defined PIP_INDEX (
+        pip install -q %PIP_INDEX% fastapi "uvicorn[standard]" websockets ultralytics opencv-python-headless numpy python-multipart pyyaml dashscope >nul 2>&1
+    ) else (
+        pip install -q fastapi "uvicorn[standard]" websockets ultralytics opencv-python-headless numpy python-multipart pyyaml dashscope >nul 2>&1
+    )
     if !errorlevel! equ 0 (
         echo   %GREEN%✓%NC%
     ) else (
@@ -299,6 +346,7 @@ if !errorlevel! neq 0 (
 if not exist "%FRONTEND_DIR%\node_modules" (
     echo -n "   安装前端依赖"
     cd /d "%FRONTEND_DIR%"
+    call npm config set registry "!NPM_REG!"
     call npm install --silent >nul 2>&1
     cd /d "%SCRIPT_DIR%"
     if !errorlevel! equ 0 (
