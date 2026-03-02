@@ -31,8 +31,12 @@
       <div class="flex items-center justify-between text-white">
         <span class="text-xs sm:text-sm font-medium">YOLO 视觉识别</span>
         <div class="flex items-center gap-2 sm:gap-3">
-          <!-- 实时 FPS -->
-          <span class="text-xs sm:text-sm text-yellow-400">{{ currentFps }} FPS</span>
+          <!-- FPS: 推荐帧率 / 实际帧率 -->
+          <span class="text-xs sm:text-sm">
+            <span class="text-gray-400">{{ recommendedFps }}</span>
+            <span class="text-yellow-400">/{{ currentFps }}</span>
+            <span class="text-gray-500 text-xs">FPS</span>
+          </span>
           <div class="flex items-center gap-1">
             <span class="text-xs">{{ (confidence * 100).toFixed(0) }}%</span>
             <input 
