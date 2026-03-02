@@ -34,7 +34,9 @@ export default function useWebSocket() {
       }
 
       socket.value.onmessage = (event) => {
+        console.log('[WS] Raw message:', event.data.substring ? event.data.substring(0, 100) : 'binary')
         const data = JSON.parse(event.data)
+        console.log('[WS] Parsed:', data.type)
         messageHandlers.value.forEach(handler => handler(data))
       }
 

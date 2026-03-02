@@ -494,8 +494,8 @@ const captureFrame = () => {
   const now = performance.now()
   // Only process if WebSocket is connected and not currently processing
   if (!isProcessing && isConnected() && now - lastCaptureTime >= frameInterval) {
+    console.log(`[capture] sending frame, isProcessing=${isProcessing}, interval=${now - lastCaptureTime}`)
     lastCaptureTime = now
-    
     const video = videoRef.value
     if (video && video.readyState === 4) {
       const videoWidth = video.videoWidth || 640

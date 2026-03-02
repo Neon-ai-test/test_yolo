@@ -114,7 +114,7 @@ class YOLODetector:
         self.avg_process_time = avg_time
         self.benchmark_done = True
         
-        recommended_fps = int(1.0 / avg_time * 0.8)
+        logger.info(f"[Benchmark] avg_time={avg_time:.3f}s, recommended_fps={recommended_fps}")
         
         return {
             "device": self.device,
