@@ -92,30 +92,32 @@ async def handle_websocket(websocket: WebSocket, detector):
                     
                     if not is_processing and latest_image_bytes:
                         is_processing = True
-                        pending_count += 1  # Fix #5: Track pending count
+                        pending_count += 1
                         img_data = latest_image_bytes
                         conf = latest_confidence
                         
-                        def process():
+                        loop = asyncio.get_event_loop()
+                        
+                        def process_task():
                             try:
-                                result = detector.detect(img_data, conf=conf)
-                                return result
+                                return detector.detect(img_data, conf=conf)
                             except Exception as e:
                                 logger.error(f"Detection error: {e}")
                                 return {"detections": []}
                         
-                        # Fix #3: Use default argument to capture current values
-                        asyncio.get_event_loop().run_in_executor(
-                            None, 
-                            lambda r=img_data, c=conf: detector.detect(r, conf=c)
-                        ).add_done_callback(
-                            lambda fut, _ws=websocket, _cid=connection_id: 
-                                asyncio.create_task(send_result(fut.result(), _ws, _cid))
-                        )
+                        def callback_wrapper(fut):
+                            try:
+                                result = fut.result()
+                            except Exception as e:
+                                logger.error(f"Executor error: {e}")
+                                result = {"detections": []}
+                            # 在正确的线程中调度 asyncio 任务
+                            asyncio.run_coroutine_threadsafe(
+                                send_result(result, websocket, connection_id),
+                                loop
+                            )
                         
-                        # Alternative fix #3: Move send_result definition outside and use partial
-                        # Or use default argument capture pattern
-                    
+                        loop.run_in_executor(None, process_task).add_done_callback(callback_wrapper)
                     async def send_result(result, ws, cid):
                         nonlocal is_processing, latest_detections, pending_count
                         pending_count -= 1  # Fix #5: Decrement on completion
