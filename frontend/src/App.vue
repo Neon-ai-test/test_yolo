@@ -188,7 +188,7 @@ const saveSettings = async () => {
   }
 }
 
-const { connect, disconnect, sendFrame, setConfidence, onMessage } = useWebSocket()
+const { connect, disconnect, sendFrame, setConfidence, onMessage, isConnected } = useWebSocket()
 
 const uniqueClasses = computed(() => {
   const classes = new Set(detections.value.map(d => d.class_name))
@@ -295,10 +295,15 @@ const startCamera = async () => {
     
     isStreaming.value = true
     
-    wsConnected.value = connect('ws://localhost:3000/ws/detect')
-    setConfidence(confidence.value)
-    
-    captureFrame()
+    try {
+      await connect('ws://localhost:3000/ws/detect')
+      wsConnected.value = true
+      setConfidence(confidence.value)
+      captureFrame()
+    } catch (e) {
+      console.error('WebSocket connection failed:', e)
+      wsConnected.value = false
+    }
   } catch (err) {
     console.error('Camera error:', err)
     alert('无法访问摄像头')
@@ -335,7 +340,8 @@ const captureFrame = () => {
   if (!isStreaming.value) return
   
   const now = performance.now()
-  if (!isProcessing && now - lastCaptureTime >= frameInterval) {
+  // Only process if WebSocket is connected and not currently processing
+  if (!isProcessing && isConnected() && now - lastCaptureTime >= frameInterval) {
     lastCaptureTime = now
     
     const video = videoRef.value

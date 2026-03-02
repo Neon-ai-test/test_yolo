@@ -11,41 +11,44 @@ export default function useWebSocket() {
   let url = ''
 
   const connect = (wsUrl) => {
-    url = wsUrl
-    if (socket.value?.readyState === WebSocket.OPEN) {
-      return true
-    }
+    return new Promise((resolve, reject) => {
+      url = wsUrl
+      if (socket.value?.readyState === WebSocket.OPEN) {
+        resolve(true)
+        return
+      }
 
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
 
-    socket.value = new WebSocket(wsUrl)
+      socket.value = new WebSocket(wsUrl)
 
-    socket.value.binaryType = 'arraybuffer'
+      socket.value.binaryType = 'arraybuffer'
 
-    socket.value.onopen = () => {
-      console.log('WebSocket connected')
-      reconnectAttempts = 0
-    }
+      socket.value.onopen = () => {
+        console.log('WebSocket connected')
+        reconnectAttempts = 0
+        resolve(true)
+      }
 
-    socket.value.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      messageHandlers.value.forEach(handler => handler(data))
-    }
+      socket.value.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        messageHandlers.value.forEach(handler => handler(data))
+      }
 
-    socket.value.onclose = () => {
-      console.log('WebSocket disconnected')
-      socket.value = null
-      tryReconnect()
-    }
+      socket.value.onclose = () => {
+        console.log('WebSocket disconnected')
+        socket.value = null
+        tryReconnect()
+      }
 
-    socket.value.onerror = (error) => {
-      console.error('WebSocket error:', error)
-    }
-
-    return true
+      socket.value.onerror = (error) => {
+        console.error('WebSocket error:', error)
+        reject(error)
+      }
+    })
   }
 
   const tryReconnect = () => {
@@ -76,6 +79,10 @@ export default function useWebSocket() {
     currentConfidence = conf
   }
 
+  const isConnected = () => {
+    return socket.value?.readyState === WebSocket.OPEN
+  }
+
   const sendFrame = (buffer) => {
     if (socket.value?.readyState === WebSocket.OPEN) {
       const confInt = Math.floor(currentConfidence * 100)
@@ -96,6 +103,7 @@ export default function useWebSocket() {
     disconnect,
     sendFrame,
     setConfidence,
-    onMessage
+    onMessage,
+    isConnected
   }
 }
