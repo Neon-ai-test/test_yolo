@@ -78,12 +78,12 @@
             <span class="text-white">语音播报</span>
             <button 
               @click="ttsEnabled = !ttsEnabled; saveSettings()"
-              class="w-12 h-6 rounded-full transition-colors"
+              class="relative w-12 h-6 rounded-full transition-colors"
               :class="ttsEnabled ? 'bg-green-500' : 'bg-gray-600'"
             >
               <span 
-                class="inline-block w-5 h-5 bg-white rounded-full transition-transform"
-                :class="ttsEnabled ? 'translate-x-6' : 'translate-x-0.5'"
+                class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform"
+                :class="ttsEnabled ? 'translate-x-6' : 'translate-x-0'"
               ></span>
             </button>
           </div>
