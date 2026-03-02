@@ -47,8 +47,18 @@ class YOLODetector:
         self.model.to(self.device)
         
     def detect(self, image_data: bytes, conf: float = 0.25) -> dict:
-        nparr = np.frombuffer(image_data, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        # Input validation
+        if not image_data or len(image_data) == 0:
+            return {"detections": [], "width": 0, "height": 0}
+        
+        try:
+            nparr = np.frombuffer(image_data, np.uint8)
+            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if image is None:
+                return {"detections": [], "width": 0, "height": 0}
+        except Exception:
+            return {"detections": [], "width": 0, "height": 0}
+        
         h, w = image.shape[:2]
 
         print(f"[Detector] imgsz={self.imgsz}")

@@ -31,11 +31,16 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-_last_tts_time = {}
+# Per-connection TTS state (connection-scoped to avoid race conditions)
+_connection_tts_state = {}
 _tts_lock = threading.Lock()
 
+# Concurrency limit - max pending frames in queue
+MAX_PENDING_FRAMES = 2
 
-def should_speak(class_name: str) -> bool:
+
+def should_speak(class_name: str, connection_id: int) -> bool:
+    """Check if TTS should speak for this connection."""
     config = tts_handler.get_tts_config()
     if not config.get('enabled', False):
         return False
@@ -44,19 +49,23 @@ def should_speak(class_name: str) -> bool:
     current_time = time.time()
     
     with _tts_lock:
-        last_time = _last_tts_time.get(class_name, 0)
+        key = f"{connection_id}:{class_name}"
+        last_time = _connection_tts_state.get(key, 0)
         if current_time - last_time < cooldown:
             return False
-        _last_tts_time[class_name] = current_time
+        _connection_tts_state[key] = current_time
         return True
 
 
 async def handle_websocket(websocket: WebSocket, detector):
     await manager.connect(websocket)
     
+    # Connection-scoped state
+    connection_id = id(websocket)
     latest_image_bytes = None
     latest_confidence = 0.25
     is_processing = False
+    pending_count = 0  # Fix #5: Concurrency limit counter
     latest_detections = []
     
     try:
@@ -71,6 +80,11 @@ async def handle_websocket(websocket: WebSocket, detector):
                 msg_type = message[0]
                 
                 if msg_type == 0x01:
+                    # Fix #5: Check pending count before processing
+                    if pending_count >= MAX_PENDING_FRAMES:
+                        logger.warning(f"Connection {connection_id}: Max pending frames reached, dropping frame")
+                        continue
+                    
                     conf_int = message[1] if len(message) > 1 else 25
                     latest_confidence = conf_int / 100.0
                     image_bytes = message[2:] if len(message) > 2 else message[1:]
@@ -78,22 +92,33 @@ async def handle_websocket(websocket: WebSocket, detector):
                     
                     if not is_processing and latest_image_bytes:
                         is_processing = True
+                        pending_count += 1  # Fix #5: Track pending count
                         img_data = latest_image_bytes
+                        conf = latest_confidence
                         
                         def process():
                             try:
-                                result = detector.detect(img_data, conf=latest_confidence)
+                                result = detector.detect(img_data, conf=conf)
                                 return result
                             except Exception as e:
                                 logger.error(f"Detection error: {e}")
                                 return {"detections": []}
                         
-                        asyncio.get_event_loop().run_in_executor(None, process).add_done_callback(
-                            lambda f: asyncio.ensure_future(send_result(f.result()))
+                        # Fix #3: Use default argument to capture current values
+                        asyncio.get_event_loop().run_in_executor(
+                            None, 
+                            lambda r=img_data, c=conf: detector.detect(r, conf=c)
+                        ).add_done_callback(
+                            lambda fut, _ws=websocket, _cid=connection_id: 
+                                asyncio.create_task(send_result(fut.result(), _ws, _cid))
                         )
+                        
+                        # Alternative fix #3: Move send_result definition outside and use partial
+                        # Or use default argument capture pattern
                     
-                    async def send_result(result):
-                        nonlocal is_processing, latest_detections
+                    async def send_result(result, ws, cid):
+                        nonlocal is_processing, latest_detections, pending_count
+                        pending_count -= 1  # Fix #5: Decrement on completion
                         is_processing = False
                         try:
                             detections = result.get("detections", [])
@@ -108,10 +133,11 @@ async def handle_websocket(websocket: WebSocket, detector):
                             
                             logger.info(f"Detections: {new_detected}, TTS enabled: {tts_handler.get_tts_config().get('enabled', False)}")
                             
+                            # Fix #6: Pass connection_id to should_speak
                             if new_detected and tts_handler.get_tts_config().get('enabled', False):
                                 config = tts_handler.get_tts_config()
                                 for class_name in new_detected:
-                                    if should_speak(class_name):
+                                    if should_speak(class_name, cid):
                                         text = f"我看到了{class_name}"
                                         logger.info(f"[TTS] Speaking: {text}")
                                         audio_data = await asyncio.get_event_loop().run_in_executor(
@@ -120,17 +146,17 @@ async def handle_websocket(websocket: WebSocket, detector):
                                         logger.info(f"[TTS] Audio generated, size: {len(audio_data) if audio_data else 0}")
                                         if audio_data:
                                             audio_b64 = base64.b64encode(audio_data).decode('utf-8')
-                                            await manager.send_message(websocket, {
+                                            await manager.send_message(ws, {
                                                 "type": "tts",
                                                 "audio": audio_b64,
                                                 "text": text
                                             })
                             
                             latest_detections = detections
-                            await manager.send_message(websocket, response)
+                            await manager.send_message(ws, response)
                         except Exception as e:
                             logger.error(f"Send error: {e}")
-
+    
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         logger.info("Client disconnected")

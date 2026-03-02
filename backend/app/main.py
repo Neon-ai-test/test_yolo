@@ -32,6 +32,17 @@ async def lifespan(app: FastAPI):
         detector = YOLODetector()
     yield
 
+    # Cleanup: unload model and release resources
+    try:
+        if detector is not None:
+            logger.info("Unloading YOLO model...")
+            del detector
+    except Exception:
+        pass
+    detector = None
+    import gc
+    gc.collect()
+
 
 app = FastAPI(title="YOLO Vision API", lifespan=lifespan)
 
@@ -71,7 +82,7 @@ async def get_config():
     return {
         "tts_enabled": tts_config.get('enabled', False),
         "imgsz": detector.imgsz,
-        "imgsz_options": [100, 128, 192, 256, 320, 480, 640]
+        "imgsz_options": [128, 160, 192, 224, 256, 288, 320, 416, 512, 640]
     }
 
 

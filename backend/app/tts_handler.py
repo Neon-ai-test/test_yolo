@@ -4,12 +4,17 @@ import yaml
 import base64
 import time
 import threading
+import hashlib
 import dashscope
 from dashscope.audio.qwen_tts_realtime import *
 
 _config = None
-_tts_instance = None
 _tts_lock = threading.Lock()
+
+# Audio cache to avoid recreating same audio
+_audio_cache = {}
+_audio_cache_lock = threading.Lock()
+_CACHE_TTL = 300  # 5 minutes cache TTL
 
 
 def load_config():
@@ -21,6 +26,7 @@ def load_config():
 
 
 def get_tts_config():
+    global _config
     if _config is None:
         load_config()
     return _config.get('tts', {})
@@ -31,6 +37,31 @@ def set_tts_enabled(enabled: bool):
     if _config is None:
         load_config()
     _config['tts']['enabled'] = enabled
+
+
+def _get_cache_key(text: str) -> str:
+    """Generate cache key for text."""
+    return hashlib.md5(text.encode()).hexdigest()
+
+
+def _get_cached_audio(text: str) -> bytes:
+    """Get cached audio if available and not expired."""
+    key = _get_cache_key(text)
+    with _audio_cache_lock:
+        if key in _audio_cache:
+            cached_time, audio_data = _audio_cache[key]
+            if time.time() - cached_time < _CACHE_TTL:
+                return audio_data
+            else:
+                del _audio_cache[key]
+    return None
+
+
+def _set_cached_audio(text: str, audio_data: bytes):
+    """Cache audio with TTL."""
+    key = _get_cache_key(text)
+    with _audio_cache_lock:
+        _audio_cache[key] = (time.time(), audio_data)
 
 
 class TTSCallback(QwenTtsRealtimeCallback):
@@ -78,6 +109,12 @@ def synthesize_speech(text: str) -> bytes:
         print('[TTS] API key not configured')
         return b''
     
+    # Check cache first (Fix #6: avoid recreating same audio)
+    cached_audio = _get_cached_audio(text)
+    if cached_audio:
+        print(f'[TTS] Cache hit for: {text}')
+        return cached_audio
+    
     dashscope.api_key = api_key
     
     callback = TTSCallback()
@@ -106,6 +143,10 @@ def synthesize_speech(text: str) -> bytes:
         print(f'[TTS] Generated audio size: {len(audio_data)} bytes')
         
         tts.close()
+        
+        # Cache the audio (Fix #6: cache for reuse)
+        if audio_data:
+            _set_cached_audio(text, audio_data)
         
         return audio_data
         
