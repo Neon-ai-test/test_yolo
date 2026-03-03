@@ -289,7 +289,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, shallowRef } from 'vue'
+import { ref, computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import useWebSocket from './composables/useWebSocket'
 
 // 类别颜色映射
@@ -840,6 +840,13 @@ onMounted(() => {
   initBenchmark()
   loadSettings()
   checkCameras()
+})
+
+// 弹窗打开时刷新缓存大小
+watch(showSettings, (newVal) => {
+  if (newVal) {
+    loadCacheSize()
+  }
 })
 
 onUnmounted(() => {
