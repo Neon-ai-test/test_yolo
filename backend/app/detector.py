@@ -4,6 +4,9 @@ from ultralytics import YOLO
 import torch
 import time
 import base64
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_IMGSZ = 320
