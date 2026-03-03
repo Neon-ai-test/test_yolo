@@ -108,105 +108,144 @@
     
     <!-- 设置弹窗 -->
     <div v-if="showSettings" class="absolute inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
-      <div class="bg-gray-800 rounded-xl p-4 sm:p-6 w-80 max-w-[90vw] max-h-[80vh] overflow-y-auto">
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="text-white text-lg font-medium">设置</h3>
-          <button @click="showSettings = false" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+      <div class="bg-gray-800 rounded-xl w-[360px] sm:w-[480px] max-w-[95vw] max-h-[80vh] overflow-hidden flex">
+        <!-- 左侧 Tab 导航 -->
+        <div class="w-20 sm:w-24 bg-gray-900/50 flex flex-col py-4">
+          <button 
+            @click="settingsTab = 'detection'"
+            class="flex flex-col items-center gap-1 py-3 px-2 transition-colors"
+            :class="settingsTab === 'detection' ? 'text-blue-400 bg-blue-500/20' : 'text-gray-400 hover:text-white'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <span class="text-xs">检测</span>
+          </button>
+          <button 
+            @click="settingsTab = 'voice'"
+            class="flex flex-col items-center gap-1 py-3 px-2 transition-colors"
+            :class="settingsTab === 'voice' ? 'text-blue-400 bg-blue-500/20' : 'text-gray-400 hover:text-white'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+            <span class="text-xs">语音</span>
+          </button>
         </div>
         
-        <div class="space-y-4">
-          <!-- 语音播报开关 -->
-          <div class="flex items-center justify-between">
-            <span class="text-white text-sm">语音播报</span>
+        <!-- 右侧内容区 -->
+        <div class="flex-1 flex flex-col min-w-0">
+          <div class="flex justify-between items-center p-4 border-b border-gray-700">
+            <h3 class="text-white text-lg font-medium">
+              {{ settingsTab === 'detection' ? '检测配置' : '语音配置' }}
+            </h3>
+            <button @click="showSettings = false" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+          </div>
+          
+          <div class="flex-1 overflow-y-auto p-4 space-y-4">
+            <!-- 检测配置 -->
+            <template v-if="settingsTab === 'detection'">
+              <!-- JPEG 图像质量 -->
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-white text-sm">图像质量</span>
+                  <span class="text-gray-400 text-sm">{{ Math.round(jpegQuality * 100) }}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0.3" 
+                  max="1" 
+                  step="0.1" 
+                  v-model="jpegQuality"
+                  class="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer"
+                  @change="saveSettings"
+                >
+                <p class="text-gray-500 text-xs mt-1">影响传输画质和速度</p>
+              </div>
+              
+              <!-- 检测尺寸 -->
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-white text-sm">检测尺寸</span>
+                  <span class="text-gray-400 text-sm">{{ imgsz }}px</span>
+                </div>
+                <div class="flex gap-1 sm:gap-2 flex-wrap">
+                  <button 
+                    v-for="size in imgszOptions" 
+                    :key="size"
+                    @click="imgsz = size; saveSettings()"
+                    class="px-2 sm:px-3 py-1 rounded text-xs transition-colors"
+                    :class="imgsz === size ? 'bg-blue-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'"
+                  >
+                    {{ size }}
+                  </button>
+                </div>
+                <p class="text-gray-500 text-xs mt-2">数值越大精度越高，速度越慢</p>
+              </div>
+            </template>
+            
+            <!-- 语音配置 -->
+            <template v-else>
+              <!-- 语音播报开关 -->
+              <div class="flex items-center justify-between">
+                <span class="text-white text-sm">语音播报</span>
+                <button 
+                  @click="ttsEnabled = !ttsEnabled; saveSettings()"
+                  class="relative w-12 h-6 rounded-full transition-colors"
+                  :class="ttsEnabled ? 'bg-green-500' : 'bg-gray-600'"
+                >
+                  <span 
+                    class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform"
+                    :class="ttsEnabled ? 'translate-x-6' : 'translate-x-0'"
+                  ></span>
+                </button>
+              </div>
+              
+              <!-- TTS 音量控制 -->
+              <div v-if="ttsEnabled">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-white text-sm">播报音量</span>
+                  <span class="text-gray-400 text-sm">{{ (ttsVolume * 100).toFixed(0) }}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0.1" 
+                  max="2" 
+                  step="0.1" 
+                  v-model="ttsVolume"
+                  class="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer"
+                  @change="saveSettings"
+                >
+              </div>
+              
+              <!-- TTS 音色选择 -->
+              <div v-if="ttsEnabled">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-white text-sm">音色选择</span>
+                </div>
+                <select 
+                  v-model="ttsVoice" 
+                  @change="saveSettings"
+                  class="w-full px-3 py-2 bg-gray-700 text-white rounded-lg appearance-none cursor-pointer"
+                >
+                  <option v-for="voice in voiceList" :key="voice.id" :value="voice.id">
+                    {{ voice.name }} - {{ voice.desc }}
+                  </option>
+                </select>
+              </div>
+            </template>
+          </div>
+          
+          <div class="p-4 border-t border-gray-700">
             <button 
-              @click="ttsEnabled = !ttsEnabled; saveSettings()"
-              class="relative w-12 h-6 rounded-full transition-colors"
-              :class="ttsEnabled ? 'bg-green-500' : 'bg-gray-600'"
+              @click="showSettings = false" 
+              class="w-full py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors"
             >
-              <span 
-                class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform"
-                :class="ttsEnabled ? 'translate-x-6' : 'translate-x-0'"
-              ></span>
+              完成
             </button>
           </div>
-          
-          <!-- TTS 音量控制 -->
-          <div v-if="ttsEnabled">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-white text-sm">播报音量</span>
-              <span class="text-gray-400 text-sm">{{ (ttsVolume * 100).toFixed(0) }}%</span>
-            </div>
-            <input 
-              type="range" 
-              min="0.1" 
-              max="2" 
-              step="0.1" 
-              v-model="ttsVolume"
-              @input="saveSettings"
-              class="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer"
-            >
-          </div>
-          
-          <!-- TTS 音色选择 -->
-          <div v-if="ttsEnabled">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-white text-sm">音色选择</span>
-            </div>
-            <select 
-              v-model="ttsVoice" 
-              @change="saveSettings"
-              class="w-full px-3 py-2 bg-gray-700 text-white rounded-lg appearance-none cursor-pointer"
-            >
-              <option v-for="voice in voiceList" :key="voice.id" :value="voice.id">
-                {{ voice.name }} - {{ voice.desc }}
-              </option>
-            </select>
-          </div>
-          
-          <!-- JPEG 图像质量 -->
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-white text-sm">图像质量</span>
-              <span class="text-gray-400 text-sm">{{ Math.round(jpegQuality * 100) }}%</span>
-            </div>
-            <input 
-              type="range" 
-              min="0.3" 
-              max="1" 
-              step="0.1" 
-              v-model="jpegQuality"
-              class="w-full h-2 bg-white/30 rounded-lg appearance-none cursor-pointer"
-            >
-            <p class="text-gray-500 text-xs mt-1">影响传输画质和速度</p>
-          </div>
-          
-          <!-- 检测尺寸 -->
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-white text-sm">检测尺寸</span>
-              <span class="text-gray-400 text-sm">{{ imgsz }}px</span>
-            </div>
-            <div class="flex gap-1 sm:gap-2 flex-wrap">
-              <button 
-                v-for="size in imgszOptions" 
-                :key="size"
-                @click="imgsz = size; saveSettings()"
-                class="px-2 sm:px-3 py-1 rounded text-xs transition-colors"
-                :class="imgsz === size ? 'bg-blue-500 text-white' : 'bg-gray-600 text-gray-300 hover:bg-gray-500'"
-              >
-                {{ size }}
-              </button>
-            </div>
-            <p class="text-gray-500 text-xs mt-2">数值越大精度越高，速度越慢</p>
-          </div>
         </div>
-        
-        <button 
-          @click="showSettings = false" 
-          class="w-full mt-6 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors"
-        >
-          完成
-        </button>
       </div>
     </div>
     
@@ -272,6 +311,7 @@ const device = ref('cpu')
 const CONFIDENCE = parseFloat(localStorage.getItem('yolo_confidence') || '0.25')
 const confidence = ref(CONFIDENCE)
 const showSettings = ref(false)
+const settingsTab = ref('detection') // 'detection' or 'voice'
 const ttsEnabled = ref(false)
 const ttsVolume = ref(parseFloat(localStorage.getItem('yolo_tts_volume') || '1'))
 const ttsVoice = ref('Cherry')
