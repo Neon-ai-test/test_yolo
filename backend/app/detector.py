@@ -117,6 +117,8 @@ class YOLODetector:
         self.avg_process_time = avg_time
         self.benchmark_done = True
         
+        recommended_fps = max(1, int(1.0 / avg_time)) if avg_time > 0 else 1
+        
         logger.info(f"[Benchmark] avg_time={avg_time:.3f}s, recommended_fps={recommended_fps}")
         
         return {

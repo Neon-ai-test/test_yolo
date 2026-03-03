@@ -1,11 +1,10 @@
 # 禁用 NNPACK 硬件不支持警告
-import warnings
-warnings.filterwarnings("ignore", message="Could not initialize NNPACK")
+import logging
+logging.getLogger("torch").setLevel(logging.ERROR)
 
 from fastapi import FastAPI, WebSocket, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import logging
 import base64
 from pydantic import BaseModel
 
