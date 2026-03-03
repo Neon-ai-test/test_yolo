@@ -117,6 +117,18 @@ async def detect_image(file: UploadFile = File(...)):
     return {"detections": result["detections"]}
 
 
+# TTS 缓存管理 API
+@app.get("/api/tts/cache-size")
+async def get_cache_size():
+    return tts_handler.get_cache_size()
+
+
+@app.post("/api/tts/clear-cache")
+async def clear_cache(voice: str = None):
+    tts_handler.clear_cache(voice)
+    return {"success": True}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -234,6 +234,20 @@
                   </option>
                 </select>
               </div>
+              
+              <!-- 缓存管理 -->
+              <div class="pt-4 border-t border-gray-700 mt-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-white text-sm">缓存大小</span>
+                  <span class="text-gray-400 text-sm">{{ cacheSize.total_readable }}</span>
+                </div>
+                <button 
+                  @click="clearCache"
+                  class="w-full px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-colors"
+                >
+                  清除缓存
+                </button>
+              </div>
             </template>
           </div>
           
@@ -315,6 +329,30 @@ const settingsTab = ref('detection') // 'detection' or 'voice'
 const ttsEnabled = ref(false)
 const ttsVolume = ref(parseFloat(localStorage.getItem('yolo_tts_volume') || '1'))
 const ttsVoice = ref('Cherry')
+const cacheSize = ref({ total_bytes: 0, total_readable: '0 B', by_voice: {} })
+
+// 获取缓存大小
+const loadCacheSize = async () => {
+  try {
+    const res = await fetch('/api/tts/cache-size')
+    cacheSize.value = await res.json()
+  } catch (e) {
+    console.error('Failed to load cache size:', e)
+  }
+}
+
+// 清除缓存
+const clearCache = async () => {
+  if (!confirm('确定要清除所有 TTS 缓存吗？')) return
+  try {
+    await fetch('/api/tts/clear-cache', { method: 'POST' })
+    await loadCacheSize()
+    showToast('缓存已清除', 'success')
+  } catch (e) {
+    console.error('Failed to clear cache:', e)
+    showToast('清除缓存失败', 'error')
+  }
+}
 
 // TTS 音色列表
 const voiceList = [
@@ -448,6 +486,7 @@ const loadSettings = async () => {
     ttsEnabled.value = data.tts_enabled
     ttsVoice.value = data.tts_voice || 'Cherry'
     imgsz.value = data.imgsz
+    await loadCacheSize()
   } catch (e) {
     console.error('Failed to load config:', e)
   }

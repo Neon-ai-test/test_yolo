@@ -11,10 +11,22 @@ from dashscope.audio.qwen_tts_realtime import *
 _config = None
 _tts_lock = threading.Lock()
 
-# Audio cache to avoid recreating same audio
-_audio_cache = {}
-_audio_cache_lock = threading.Lock()
-_CACHE_TTL = 300  # 5 minutes cache TTL
+# 磁盘缓存目录
+_CACHE_DIR = os.path.join(os.path.dirname(__file__), '..', 'tts_cache')
+
+
+def _get_voice_cache_dir(voice: str) -> str:
+    """获取指定音色的缓存目录"""
+    voice_dir = os.path.join(_CACHE_DIR, voice)
+    if not os.path.exists(voice_dir):
+        os.makedirs(voice_dir, exist_ok=True)
+    return voice_dir
+
+
+def _ensure_cache_dir():
+    """确保缓存目录存在"""
+    if not os.path.exists(_CACHE_DIR):
+        os.makedirs(_CACHE_DIR, exist_ok=True)
 
 
 def load_config():
@@ -46,42 +58,108 @@ def get_tts_voice():
 
 
 def set_tts_voice(voice: str):
-    """设置 TTS 音色并清除缓存"""
+    """设置 TTS 音色"""
     global _config
     if _config is None:
         load_config()
-    old_voice = _config.get('tts', {}).get('voice', 'Cherry')
     _config['tts']['voice'] = voice
-    
-    # 如果音色改变，清除音频缓存
-    if old_voice != voice:
-        with _audio_cache_lock:
-            _audio_cache.clear()
-        print(f'[TTS] Voice changed from {old_voice} to {voice}, cache cleared')
+
 
 def _get_cache_key(text: str) -> str:
     """Generate cache key for text."""
     return hashlib.md5(text.encode()).hexdigest()
 
 
-def _get_cached_audio(text: str) -> bytes:
-    """Get cached audio if available and not expired."""
+def _get_audio_file_path(voice: str, text: str) -> str:
+    """获取音频文件的完整路径"""
     key = _get_cache_key(text)
-    with _audio_cache_lock:
-        if key in _audio_cache:
-            cached_time, audio_data = _audio_cache[key]
-            if time.time() - cached_time < _CACHE_TTL:
-                return audio_data
-            else:
-                del _audio_cache[key]
+    voice_dir = _get_voice_cache_dir(voice)
+    return os.path.join(voice_dir, f"{key}.pcm")
+
+
+def _get_cached_audio(text: str) -> bytes:
+    """从磁盘缓存获取音频"""
+    voice = get_tts_voice()
+    file_path = _get_audio_file_path(voice, text)
+    
+    if os.path.exists(file_path):
+        with open(file_path, 'rb') as f:
+            return f.read()
     return None
 
 
 def _set_cached_audio(text: str, audio_data: bytes):
-    """Cache audio with TTL."""
-    key = _get_cache_key(text)
-    with _audio_cache_lock:
-        _audio_cache[key] = (time.time(), audio_data)
+    """将音频写入磁盘缓存"""
+    voice = get_tts_voice()
+    file_path = _get_audio_file_path(voice, text)
+    
+    _ensure_cache_dir()
+    with open(file_path, 'wb') as f:
+        f.write(audio_data)
+    
+    print(f'[TTS] Cached audio to {file_path}')
+
+
+def get_cache_size() -> dict:
+    """获取缓存大小信息"""
+    _ensure_cache_dir()
+    
+    total_size = 0
+    voice_sizes = {}
+    
+    try:
+        for voice_dir_name in os.listdir(_CACHE_DIR):
+            voice_dir = os.path.join(_CACHE_DIR, voice_dir_name)
+            if os.path.isdir(voice_dir):
+                voice_size = 0
+                for file_name in os.listdir(voice_dir):
+                    file_path = os.path.join(voice_dir, file_name)
+                    if os.path.isfile(file_path):
+                        voice_size += os.path.getsize(file_path)
+                voice_sizes[voice_dir_name] = voice_size
+                total_size += voice_size
+    except Exception as e:
+        print(f'[TTS] Error getting cache size: {e}')
+    
+    # 转换为人类可读格式
+    def format_size(bytes_size):
+        if bytes_size < 1024:
+            return f"{bytes_size} B"
+        elif bytes_size < 1024 * 1024:
+            return f"{bytes_size / 1024:.1f} KB"
+        else:
+            return f"{bytes_size / (1024 * 1024):.1f} MB"
+    
+    return {
+        "total_bytes": total_size,
+        "total_readable": format_size(total_size),
+        "by_voice": {voice: format_size(size) for voice, size in voice_sizes.items()}
+    }
+
+
+def clear_cache(voice: str = None):
+    """清除缓存"""
+    _ensure_cache_dir()
+    
+    if voice:
+        # 清除指定音色
+        voice_dir = _get_voice_cache_dir(voice)
+        if os.path.exists(voice_dir):
+            for file_name in os.listdir(voice_dir):
+                file_path = os.path.join(voice_dir, file_name)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            print(f'[TTS] Cleared cache for voice: {voice}')
+    else:
+        # 清除所有缓存
+        for voice_dir_name in os.listdir(_CACHE_DIR):
+            voice_dir = os.path.join(_CACHE_DIR, voice_dir_name)
+            if os.path.isdir(voice_dir):
+                for file_name in os.listdir(voice_dir):
+                    file_path = os.path.join(voice_dir, file_name)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+        print('[TTS] Cleared all cache')
 
 
 class TTSCallback(QwenTtsRealtimeCallback):
@@ -129,7 +207,7 @@ def synthesize_speech(text: str) -> bytes:
         print('[TTS] API key not configured')
         return b''
     
-    # Check cache first (Fix #6: avoid recreating same audio)
+    # 先检查磁盘缓存
     cached_audio = _get_cached_audio(text)
     if cached_audio:
         print(f'[TTS] Cache hit for: {text}')
@@ -164,7 +242,7 @@ def synthesize_speech(text: str) -> bytes:
         
         tts.close()
         
-        # Cache the audio (Fix #6: cache for reuse)
+        # 缓存到磁盘
         if audio_data:
             _set_cached_audio(text, audio_data)
         

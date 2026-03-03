@@ -15,7 +15,9 @@ node_modules/
 .env.local
 *.log
 .DS_Store
-config.yaml
 # 日志和PID文件
 logs/
 .pids/
+
+# TTS 语音缓存
+backend/tts_cache/
