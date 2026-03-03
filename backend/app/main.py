@@ -1,4 +1,7 @@
-# 禁用 NNPACK 硬件不支持警告
+# 禁用 NNPACK 硬件不支持警告 (设置 GLOG 环境变量)
+import os
+os.environ["GLOG_minloglevel"] = "2"  # 0=DEBUG, 1=INFO, 2=WARNING, 3=ERROR
+
 import logging
 logging.getLogger("torch").setLevel(logging.ERROR)
 
