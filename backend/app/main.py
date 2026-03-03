@@ -1,3 +1,7 @@
+# 禁用 NNPACK 硬件不支持警告
+import warnings
+warnings.filterwarnings("ignore", message="Could not initialize NNPACK")
+
 from fastapi import FastAPI, WebSocket, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
