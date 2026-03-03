@@ -9,18 +9,18 @@
 | FastAPI | ^0.132.0 | 现代高性能Web框架 |
 | Uvicorn | ^0.41.0 | ASGI服务器 |
 | Ultralytics | ^8.4.15 | YOLOv8官方库 |
-| OpenCV | ^4.13.0 | 图像处理 |
 | NumPy | ^2.2.6 | 数值计算 |
-
-## 项目结构
-
+| Dashscope | - | 阿里云通义千问 TTS |
 ```
 backend/
 ├── app/
 │   ├── main.py                 # 应用入口 & API路由
 │   ├── detector.py             # YOLO检测器实现
 │   ├── websocket_handler.py    # WebSocket处理器
+│   ├── tts_handler.py          # TTS语音合成
 │   └── models/                 # 模型文件目录
+├── config.yaml                 # 配置文件
+├── tts_cache/                  # TTS音频缓存目录
 ├── requirements.txt            # Python依赖
 └── ...
 ```
@@ -35,7 +35,9 @@ backend/
 - 自动GPU/CPU检测
 - 性能基准测试
 - 中英文类别映射
-
+- **TTS 语音播报**（阿里云通义千问）
+- **配置热更新 API**
+- **TTS 缓存管理**
 ## 快速开始
 
 ### 安装依赖
@@ -52,6 +54,19 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 服务启动后自动下载 YOLOv8n 模型（约6MB）。
 
+### 配置文件
+
+编辑 `config.yaml` 配置 TTS 语音播报：
+
+```yaml
+tts:
+  enabled: true              # 开关
+  api_key: "your-api-key"   # 阿里云 DashScope API Key
+  voice: "Cherry"            # 默认音色
+
+detection:
+  tts_cooldown: 3           # 语音播报冷却时间（秒）
+```
 ## API 接口
 
 ### 1. 健康检查
@@ -158,8 +173,62 @@ WS /ws/detect
 {
   "type": "result",
   "detections": [...]
+```
+
+### 7. 获取配置
+
+```
+GET /api/config
+```
+
+响应:
+```json
+{
+  "tts_enabled": true,
+  "tts_voice": "Cherry",
+  "imgsz": 320,
+  "imgsz_options": [128, 160, 192, 224, 256, 288, 320, 416, 512, 640]
 }
 ```
+
+### 8. 更新配置
+
+```
+POST /api/config
+Content-Type: application/json
+```
+
+请求:
+```json
+{
+  "tts_enabled": true,
+  "tts_voice": "Serena",
+  "imgsz": 416
+}
+```
+
+### 9. 获取 TTS 缓存大小
+
+```
+GET /api/tts/cache-size
+```
+
+响应:
+```json
+{
+  "total_bytes": 1024000,
+  "total_readable": "1000.0 KB",
+  "by_voice": {"Cherry": "800.0 KB", "Serena": "200.0 KB"}
+}
+```
+
+### 10. 清除 TTS 缓存
+
+```
+POST /api/tts/clear-cache?voice=Cherry
+```
+
+可选参数 `voice` 指定音色，不传则清除所有缓存。
 
 ## 性能优化
 
@@ -373,5 +442,8 @@ sudo journalctl -u yolo-api -f
 ## 相关文档
 
 - [FastAPI 文档](https://fastapi.tiangolo.com/)
+- [Ultralytics YOLOv8](https://docs.ultralytics.com/)
+- [YOLOv8 GitHub](https://github.com/ultralytics/ultralytics)
+- [阿里云 DashScope](https://dashscope.console.aliyun.com/)
 - [Ultralytics YOLOv8](https://docs.ultralytics.com/)
 - [YOLOv8 GitHub](https://github.com/ultralytics/ultralytics)

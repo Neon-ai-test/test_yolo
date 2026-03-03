@@ -33,14 +33,26 @@ frontend/
 
 ## 功能特性
 
+### 核心功能
 - 实时摄像头视频流捕获
 - WebSocket 实时与后端通信
 - 目标检测框可视化展示（Canvas绘制）
-- 识别结果列表展示（中英文）
-- 目标数量与类别统计
+- 识别结果列表展示（中英文去重）
 - 动态帧率调整（根据服务器性能）
 - 设备显示（CPU/GPU）
 
+### 语音播报
+- 40+ TTS 音色可选
+- 播报音量调节
+- 语音缓存管理
+
+### 用户体验
+- 前置/后置摄像头切换
+- 设置弹窗（检测/语音 Tab）
+- 图像质量调节
+- 检测尺寸选择
+- Toast 消息提示
+- WebSocket 自动重连
 ## 快速开始
 
 ### 安装依赖
@@ -139,8 +151,11 @@ ws://localhost:8000/ws/detect
 |------|------|------|
 | `/api/classes` | GET | 获取识别类别列表（含中文） |
 | `/api/benchmark` | GET | 性能测试，返回推荐帧率 |
-| `/api/info` | GET | 获取设备信息 |
-
+| `/api/info` | GET | 获取设备信息（CPU/GPU） |
+| `/api/config` | GET | 获取当前配置 |
+| `/api/config` | POST | 更新配置（TTS、检测尺寸等） |
+| `/api/tts/cache-size` | GET | 获取 TTS 缓存大小 |
+| `/api/tts/clear-cache` | POST | 清除 TTS 缓存 |
 ## 性能优化
 
 ### 前端优化策略
@@ -215,6 +230,13 @@ export default {
 - 使用GPU服务器可大幅提升
 - 阿里云GPU实例可达30-60FPS
 
+### 5. TTS 语音无法播报
+
+检查 config.yaml 中的 API Key 是否正确配置，确保已在阿里云 DashScope 开通通义千问语音合成服务。
+
+### 6. 摄像头切换按钮不显示
+
+需要设备有前置和后置两个摄像头才会显示切换按钮。
 ## 相关文档
 
 - [Vue3 文档](https://vuejs.org/)
