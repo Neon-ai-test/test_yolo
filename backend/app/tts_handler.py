@@ -39,6 +39,26 @@ def set_tts_enabled(enabled: bool):
     _config['tts']['enabled'] = enabled
 
 
+def get_tts_voice():
+    """获取当前 TTS 音色"""
+    config = get_tts_config()
+    return config.get('voice', 'Cherry')
+
+
+def set_tts_voice(voice: str):
+    """设置 TTS 音色并清除缓存"""
+    global _config
+    if _config is None:
+        load_config()
+    old_voice = _config.get('tts', {}).get('voice', 'Cherry')
+    _config['tts']['voice'] = voice
+    
+    # 如果音色改变，清除音频缓存
+    if old_voice != voice:
+        with _audio_cache_lock:
+            _audio_cache.clear()
+        print(f'[TTS] Voice changed from {old_voice} to {voice}, cache cleared')
+
 def _get_cache_key(text: str) -> str:
     """Generate cache key for text."""
     return hashlib.md5(text.encode()).hexdigest()
@@ -123,7 +143,7 @@ def synthesize_speech(text: str) -> bytes:
         print(f'[TTS] Synthesizing: {text}')
         
         tts = QwenTtsRealtime(
-            model='qwen3-tts-instruct-flash-realtime',
+            model='qwen3-tts-flash-realtime',
             callback=callback,
         )
         

@@ -24,6 +24,7 @@ detector = None
 class ConfigUpdate(BaseModel):
     tts_enabled: bool = None
     imgsz: int = None
+    tts_voice: str = None
 
 
 @asynccontextmanager
@@ -87,6 +88,7 @@ async def get_config():
     tts_config = tts_handler.get_tts_config()
     return {
         "tts_enabled": tts_config.get('enabled', False),
+        "tts_voice": tts_config.get('voice', 'Cherry'),
         "imgsz": detector.imgsz,
         "imgsz_options": [128, 160, 192, 224, 256, 288, 320, 416, 512, 640]
     }
@@ -96,6 +98,8 @@ async def get_config():
 async def update_config(config: ConfigUpdate):
     if config.tts_enabled is not None:
         tts_handler.set_tts_enabled(config.tts_enabled)
+    if config.tts_voice is not None:
+        tts_handler.set_tts_voice(config.tts_voice)
     if config.imgsz is not None:
         detector.set_imgsz(config.imgsz)
     return {"success": True}
