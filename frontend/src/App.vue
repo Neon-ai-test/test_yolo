@@ -52,9 +52,15 @@
           <span class="text-xs sm:text-sm px-2 py-0.5 rounded" :class="device === 'cuda' ? 'bg-green-500/70' : 'bg-yellow-500/70'">
             {{ device === 'cuda' ? 'GPU' : 'CPU' }}
           </span>
-          <span class="text-sm" :class="wsConnected ? 'text-green-400' : 'text-red-400'">
-            {{ wsConnected ? '●' : '○' }}
-          </span>
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            class="w-3 h-3" 
+            :class="wsConnected ? 'text-green-400' : 'text-red-400'"
+            fill="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <circle cx="12" cy="12" r="6" />
+          </svg>
         </div>
       </div>
     </div>
@@ -64,12 +70,22 @@
       <div class="flex justify-center gap-2 sm:gap-4">
         <!-- 摄像头切换按钮 -->
         <button 
+          v-if="hasBackCamera"
           @click="switchCamera"
           :disabled="isStreaming"
           class="px-3 sm:px-4 py-2 rounded-full font-medium transition-colors bg-gray-600 hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
-          <span class="hidden sm:inline">{{ currentCamera === 'user' ? '🔄 后置' : '🔄 前置' }}</span>
-          <span class="sm:hidden">🔄</span>
+          <span class="hidden sm:inline flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {{ currentCamera === 'user' ? '后置' : '前置' }}
+          </span>
+          <span class="sm:hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </span>
         </button>
         <button 
           @click="toggleCamera"
@@ -82,7 +98,10 @@
           @click="showSettings = true"
           class="px-3 sm:px-4 py-2 rounded-full font-medium bg-gray-600 hover:bg-gray-500 transition-colors text-sm"
         >
-          ⚙️
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
         </button>
       </div>
     </div>
@@ -245,6 +264,21 @@ const imgszOptions = [128, 160, 192, 224, 256, 288, 320, 416, 512, 640]
 
 // 摄像头状态
 const currentCamera = ref('user')
+const hasBackCamera = ref(false)
+
+// 检测可用摄像头
+const checkCameras = async () => {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    const videoDevices = devices.filter(d => d.kind === 'videoinput')
+    hasBackCamera.value = videoDevices.some(d => {
+      const label = d.label.toLowerCase()
+      return label.includes('back') || label.includes('rear') || label.includes('后置')
+    })
+  } catch (e) {
+    console.error('Failed to enumerate devices:', e)
+  }
+}
 
 // Toast 状态
 const toast = ref({
@@ -650,6 +684,7 @@ onMessage((data) => {
 onMounted(() => {
   initBenchmark()
   loadSettings()
+  checkCameras()
 })
 
 onUnmounted(() => {
