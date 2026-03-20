@@ -3,7 +3,6 @@ import numpy as np
 from ultralytics import YOLO
 import torch
 import time
-import base64
 import logging
 
 logger = logging.getLogger(__name__)
@@ -45,8 +44,10 @@ class YOLODetector:
     def _detect_device(self):
         if torch.cuda.is_available():
             self.device = 'cuda'
+            self.half = True
         else:
             self.device = 'cpu'
+            self.half = False
         self.model.to(self.device)
         
     def detect(self, image_data: bytes, conf: float = 0.25) -> dict:
@@ -64,8 +65,7 @@ class YOLODetector:
         
         h, w = image.shape[:2]
 
-        print(f"[Detector] imgsz={self.imgsz}")
-        results = self.model(image, conf=conf, iou=0.4, verbose=False, device=self.device, imgsz=self.imgsz)
+        results = self.model(image, conf=conf, iou=0.4, verbose=False, imgsz=self.imgsz, half=self.half)
 
         detections = []
         for result in results:
@@ -103,9 +103,10 @@ class YOLODetector:
 
     def benchmark(self, test_data: bytes = None, iterations: int = 5) -> dict:
         if test_data is None:
-            test_data = base64.b64decode(
-                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-            )
+            # 生成 640x480 的仿真彩色图片，模拟真实场景
+            dummy_img = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
+            _, encoded = cv2.imencode('.jpg', dummy_img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            test_data = encoded.tobytes()
         
         times = []
         for _ in range(iterations):

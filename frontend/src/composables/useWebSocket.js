@@ -2,110 +2,104 @@ import { ref } from 'vue'
 
 export default function useWebSocket() {
   const socket = ref(null)
-  const messageHandlers = ref([])
+  const connected = ref(false)
+  let messageHandlers = []
+  let closeHandlers = []
   let currentConfidence = 0.25
-  let reconnectTimer = null
-  let reconnectAttempts = 0
-  const maxReconnectAttempts = 5
-  const reconnectDelay = 2000
-  let url = ''
+  let wsUrl = ''
 
-  const connect = (wsUrl) => {
+  const connect = (url) => {
     return new Promise((resolve, reject) => {
-      url = wsUrl
+      wsUrl = url
+      console.log('[WS] Connecting to:', url)
+
       if (socket.value?.readyState === WebSocket.OPEN) {
+        console.log('[WS] Already open, reusing')
         resolve(true)
         return
       }
 
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer)
-        reconnectTimer = null
+      const oldWs = socket.value
+      socket.value = null
+      if (oldWs) {
+        try { oldWs.close() } catch (_) { /* noop */ }
       }
 
-      socket.value = new WebSocket(wsUrl)
+      let ws
+      try {
+        ws = new WebSocket(url)
+      } catch (err) {
+        console.error('[WS] new WebSocket() threw:', err.message)
+        reject(new Error(`创建WebSocket失败: ${err.message}`))
+        return
+      }
+      ws.binaryType = 'arraybuffer'
+      socket.value = ws
 
-      socket.value.binaryType = 'arraybuffer'
-
-      socket.value.onopen = () => {
-        console.log('WebSocket connected')
-        reconnectAttempts = 0
+      ws.onopen = () => {
+        console.log('[WS] onopen fired, state=', ws.readyState)
+        connected.value = true
         resolve(true)
       }
 
-      socket.value.onmessage = (event) => {
-        console.log('[WS] Raw message:', event.data.substring ? event.data.substring(0, 100) : 'binary')
-        const data = JSON.parse(event.data)
-        console.log('[WS] Parsed:', data.type)
-        messageHandlers.value.forEach(handler => handler(data))
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'connected') return
+          for (const h of messageHandlers) h(data)
+        } catch (_) { /* noop */ }
       }
 
-      socket.value.onclose = () => {
-        console.log('WebSocket disconnected')
-        socket.value = null
-        tryReconnect()
+      ws.onerror = (event) => {
+        console.error('[WS] onerror, state=', ws?.readyState, 'url=', url)
+        connected.value = false
+        reject(new Error(`连接失败 (readyState=${ws?.readyState})`))
       }
 
-      socket.value.onerror = (error) => {
-        console.error('WebSocket error:', error)
-        reject(error)
+      ws.onclose = (event) => {
+        console.log('[WS] onclose, code=', event.code, 'reason=', event.reason)
+        if (socket.value === ws) {
+          connected.value = false
+          for (const h of closeHandlers) h()
+          socket.value = null
+        }
       }
     })
   }
 
-  const tryReconnect = () => {
-    if (reconnectAttempts >= maxReconnectAttempts) {
-      console.log('Max reconnect attempts reached')
-      return
-    }
-    reconnectAttempts++
-    console.log(`Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`)
-    reconnectTimer = setTimeout(() => {
-      connect(url)
-    }, reconnectDelay)
-  }
-
   const disconnect = () => {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-    reconnectAttempts = maxReconnectAttempts
-    if (socket.value) {
-      socket.value.close()
+    const ws = socket.value
+    if (ws) {
+      ws.onopen = null
+      ws.onmessage = null
+      ws.onerror = null
+      ws.onclose = null
+      try { ws.close() } catch (_) { /* noop */ }
       socket.value = null
     }
+    connected.value = false
   }
 
-  const setConfidence = (conf) => {
-    currentConfidence = conf
-  }
-
-  const isConnected = () => {
-    return socket.value?.readyState === WebSocket.OPEN
-  }
+  const setConfidence = (conf) => { currentConfidence = conf }
+  const isConnected = () => socket.value?.readyState === WebSocket.OPEN
 
   const sendFrame = (buffer) => {
-    if (socket.value?.readyState === WebSocket.OPEN) {
-      const confInt = Math.floor(currentConfidence * 100)
-      const header = new Uint8Array([0x01, confInt])
-      const combined = new Uint8Array(header.length + buffer.byteLength)
-      combined.set(header, 0)
-      combined.set(new Uint8Array(buffer), header.length)
-      socket.value.send(combined)
-    }
+    if (!isConnected()) return
+    const confByte = Math.floor(currentConfidence * 100)
+    const header = new Uint8Array([0x01, confByte])
+    const combined = new Uint8Array(header.length + buffer.byteLength)
+    combined.set(header, 0)
+    combined.set(new Uint8Array(buffer), header.length)
+    socket.value.send(combined.buffer)
   }
 
-  const onMessage = (handler) => {
-    messageHandlers.value.push(handler)
+  const onMessage = (handler) => { messageHandlers.push(handler) }
+  const onClose = (handler) => { closeHandlers.push(handler) }
+
+  const cleanup = () => {
+    messageHandlers = []
+    closeHandlers = []
   }
 
-  return {
-    connect,
-    disconnect,
-    sendFrame,
-    setConfidence,
-    onMessage,
-    isConnected
-  }
+  return { connected, connect, disconnect, sendFrame, setConfidence, onMessage, onClose, isConnected, cleanup }
 }

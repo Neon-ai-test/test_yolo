@@ -664,7 +664,7 @@ print_success_info() {
     echo -e "${GREEN}  服务启动成功！${NC}"
     echo -e "${BLUE}==========================================${NC}"
     echo ""
-    echo -e "  ${GREEN}前端地址:${NC}  http://localhost:$WEB_PORT"
+    echo -e "  ${GREEN}前端地址:${NC}  https://localhost:$WEB_PORT"
     echo -e "  ${GREEN}后端地址:${NC}  http://localhost:$API_PORT"
     echo -e "  ${GREEN}API 文档:${NC}  http://localhost:$API_PORT/docs"
     echo ""
@@ -684,7 +684,7 @@ open_browser() {
         return
     fi
     
-    local URL="http://localhost:$WEB_PORT"
+    local URL="https://localhost:$WEB_PORT"
     
     sleep 2
     
